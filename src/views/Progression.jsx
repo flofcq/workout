@@ -8,12 +8,27 @@ const STARRED = EXERCISES.filter((e) => e.star)
 export default function Progression() {
   const [exKey, setExKey] = useState(STARRED[0]?.key || EXERCISES[0].key)
   const [sets, setSets] = useState([])
+  // Exercices ajoutés en séance hors programme : ils n'existent pas dans
+  // program.js, sans cette liste ils seraient enregistrés mais introuvables ici.
+  const [custom, setCustom] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [mode, setMode] = useState('top') // 'top' = série la plus lourde · 'e1rm' = 1RM estimé
   const [showTable, setShowTable] = useState(false)
 
-  const ex = getExercise(exKey)
+  const ex =
+    getExercise(exKey) ||
+    (() => {
+      const c = custom.find((x) => x.exercise_key === exKey)
+      return c ? { key: c.exercise_key, name: c.exercise_name } : null
+    })()
+
+  useEffect(() => {
+    api.exercises
+      .custom()
+      .then(setCustom)
+      .catch(() => setCustom([]))
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -103,6 +118,15 @@ export default function Progression() {
               </option>
             ))}
           </optgroup>
+          {custom.length > 0 && (
+            <optgroup label="Hors programme">
+              {custom.map((e) => (
+                <option key={e.exercise_key} value={e.exercise_key}>
+                  {e.exercise_name}
+                </option>
+              ))}
+            </optgroup>
+          )}
         </select>
       </div>
 

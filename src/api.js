@@ -91,6 +91,11 @@ const realApi = {
     remove: (id) => request(`/sets/${id}`, { method: 'DELETE' }),
   },
 
+  /** Exercices hors programme déjà utilisés par le compte. */
+  exercises: {
+    custom: () => request('/exercises').then((d) => d.exercises),
+  },
+
   body: {
     list: () => request('/body-metrics').then((d) => d.entries),
     save: (payload) =>

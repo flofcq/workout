@@ -308,6 +308,47 @@ export function getExercise(key) {
   return EXERCISES.find((e) => e.key === key)
 }
 
+// ---------- Exercices hors programme ----------
+// Quand une machine est occupée, on enregistre ce qu'on a fait à la place.
+// Ces exercices ne sont pas dans PROGRAM : leur libellé est stocké en base
+// (sets.exercise_name), et leur clé est dérivée du nom pour que deux séances
+// saisies pareil se regroupent et donnent une courbe de progression.
+
+export const CUSTOM_PREFIX = 'libre_'
+
+export const isCustomKey = (key) => String(key || '').startsWith(CUSTOM_PREFIX)
+
+/**
+ * « Presse à cuisses 45° » → « libre_presse_a_cuisses_45 ». Les accents sont
+ * réduits et la casse aplatie : sans ça « Pec deck » et « pec-deck » seraient
+ * deux exercices distincts et la progression serait coupée en deux.
+ */
+export function customKey(name) {
+  const slug = String(name)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '') // marques diacritiques laissées par NFD
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 40)
+  return slug ? CUSTOM_PREFIX + slug : null
+}
+
+/** Gabarit d'exercice pour l'affichage : mêmes champs que ceux de PROGRAM. */
+export function customExercise(key, name) {
+  return {
+    key,
+    name,
+    sets: 4, // on ne connaît pas l'intention : 4 lignes, les vides sont ignorées
+    reps: '—',
+    rpe: '—',
+    rest: 120,
+    muscles: 'Hors programme',
+    cue: "Exercice ajouté en séance, faute de machine disponible. Note la charge et les répétitions comme d'habitude : la progression se suivra sur ce nom.",
+    custom: true,
+  }
+}
+
 // Estimation de 1RM (formule d'Epley). Peu fiable au-delà de 12 reps,
 // on la borne pour éviter des valeurs absurdes sur les séries longues.
 export function estimate1RM(weight, reps) {

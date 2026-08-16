@@ -35,6 +35,15 @@ const sets = [
     id: `w4-dib-${i}`, workout_id: 'w4', exercise_key: 'di_barre', set_index: i,
     weight: 62.5, reps: 8 - (i > 1 ? 1 : 0), rpe: 8, performed_at: daysAgo(4),
   })),
+  // Exercice ajouté en séance faute de machine : porte son libellé, puisque
+  // program.js ne le connaît pas.
+  ...[['w3', 7, 120], ['w4', 4, 130]].flatMap(([w, d, kg]) =>
+    [0, 1, 2].map((i) => ({
+      id: `${w}-libre-${i}`, workout_id: w, exercise_key: 'libre_presse_horizontale',
+      exercise_name: 'Presse à cuisses horizontale', set_index: i,
+      weight: kg, reps: 12 - i, rpe: 8, performed_at: daysAgo(d),
+    }))
+  ),
 ]
 
 const measures = [24, 17, 10, 3].map((d, i) => ({
@@ -86,9 +95,25 @@ export const mockApi = {
   sets: {
     byExercises: (keys) => ok(sorted(sets.filter((s) => keys.includes(s.exercise_key)))),
     byWorkouts: (ids) => ok(sorted(sets.filter((s) => ids.includes(s.workout_id)))),
+    // Les écritures ne sont pas persistées, mais on renvoie le nom pour que
+    // l'exercice ajouté s'affiche correctement jusqu'au rechargement.
     create: (payload) => ok({ ...payload, id: `tmp-${Math.random().toString(36).slice(2)}` }),
     update: (id, payload) => ok({ ...payload, id }),
     remove: () => ok({ ok: true }),
+  },
+
+  // Une machine déjà utilisée hors programme, pour montrer qu'elle est
+  // reproposée à l'ajout et suivie dans Progression.
+  exercises: {
+    custom: () =>
+      ok([
+        {
+          exercise_key: 'libre_presse_horizontale',
+          exercise_name: 'Presse à cuisses horizontale',
+          sets_count: 6,
+          last_performed_at: daysAgo(4),
+        },
+      ]),
   },
 
   body: {

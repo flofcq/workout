@@ -14,7 +14,7 @@ export default handler({
           reps   = ${num(b.reps)},
           rpe    = ${num(b.rpe)}
       where id = ${req.query.id} and user_id = ${user.id}
-      returning id, workout_id, exercise_key, set_index,
+      returning id, workout_id, exercise_key, exercise_name, set_index,
                  weight::float8 as weight, reps, rpe::float8 as rpe,
                  performed_at::text as performed_at
     `

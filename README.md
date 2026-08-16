@@ -3,7 +3,7 @@
 Application web pour enregistrer tes séances et tes charges, avec le programme
 « Priorité pectoraux » pré-chargé.
 
-- **Séance** — saisie charge / reps / RPE jour par jour : tu navigues par date (flèches ou calendrier) et choisis la séance par son nom, ce qui permet de rattraper celle d'hier. Rappel de ta dernière performance sur chaque exercice, chrono de repos qui démarre tout seul quand tu valides une série.
+- **Séance** — saisie charge / reps / RPE jour par jour : tu navigues par date (flèches ou calendrier) et choisis la séance par son nom, ce qui permet de rattraper celle d'hier. Machine occupée ? **Ajoute un exercice** à la volée, pris ailleurs dans le programme ou saisi librement. Rappel de ta dernière performance sur chaque exercice, chrono de repos qui démarre tout seul quand tu valides une série.
 - **Historique** — toutes tes séances passées, dépliables.
 - **Progression** — courbes d'évolution par exercice (charge la plus lourde ou 1RM estimé).
 - **Corps** — poids, mensurations et nombre de pas dans le temps.
@@ -180,6 +180,7 @@ Toutes les routes exigent une session valide, sauf `signup` et `login`.
 | `/api/sets` | `GET` `POST` | Filtre `?exercises=` ou `?workouts=` · enregistre une série |
 | `/api/sets/:id` | `PATCH` `DELETE` | Modifie · supprime une série |
 | `/api/body-metrics` | `GET` `PUT` | Liste · enregistre une mesure (une par jour) |
+| `/api/exercises` | `GET` | Les exercices hors programme déjà utilisés par le compte |
 | `/api/steps` | `POST` | Enregistre les pas du jour — jeton, pas de session (voir ci-dessous) |
 
 ---
@@ -245,6 +246,24 @@ pas dans le formulaire « Nouvelle mesure », et enregistrer un poids ne les eff
 jamais — les deux routes écrivent des colonnes distinctes de la même ligne.
 
 ---
+
+## Exercices hors programme
+
+Quand la machine prévue est prise, le bouton **+ Ajouter un exercice** de
+l'onglet Séance permet d'enregistrer ce que tu as fait à la place — soit un
+exercice pris ailleurs dans ton programme, soit une machine qu'il ne connaît
+pas, dont tu saisis le nom.
+
+Un exercice saisi librement reçoit une clé dérivée de son nom
+(« Presse à cuisses » → `libre_presse_a_cuisses`). Accents, casse et
+ponctuation sont neutralisés, donc « Pec deck », « pec-deck » et « PEC DECK »
+se rejoignent sur la même courbe. C'est cette clé qui relie les séances : garde
+le même nom d'une fois sur l'autre et l'exercice apparaît dans l'onglet
+Progression, sous « Hors programme ».
+
+Ces ajouts ne modifient jamais [`src/program.js`](src/program.js) : ils ne
+valent que pour la séance où tu les fais. Si l'un d'eux devient une habitude,
+c'est le signe qu'il mérite d'entrer dans le programme — voir ci-dessous.
 
 ## Adapter le programme
 

@@ -82,6 +82,13 @@ create table if not exists salle.body_metrics (
 -- créées avant, et ne fait rien sur les autres.
 alter table salle.body_metrics add column if not exists steps int;
 
+-- Exercices hors programme (machine occupée, remplacement improvisé). La clé
+-- reste dans exercise_key, comme pour les autres, pour que la progression se
+-- suive d'une séance à l'autre ; seul le libellé saisi est stocké ici, faute
+-- de pouvoir le retrouver dans src/program.js. Reste NULL pour les exercices
+-- du programme, dont le nom vient du code.
+alter table salle.sets add column if not exists exercise_name text;
+
 -- ---------- Index ----------
 create index if not exists sets_user_exercise_idx  on salle.sets (user_id, exercise_key, performed_at);
 create index if not exists sets_workout_idx        on salle.sets (workout_id);

@@ -28,7 +28,7 @@ export default handler({
 
     const rows = exercises.length
       ? await sql`
-          select id, workout_id, exercise_key, set_index,
+          select id, workout_id, exercise_key, exercise_name, set_index,
                  weight::float8 as weight, reps, rpe::float8 as rpe,
                  performed_at::text as performed_at
           from salle.sets
@@ -37,7 +37,7 @@ export default handler({
           limit 600
         `
       : await sql`
-          select id, workout_id, exercise_key, set_index,
+          select id, workout_id, exercise_key, exercise_name, set_index,
                  weight::float8 as weight, reps, rpe::float8 as rpe,
                  performed_at::text as performed_at
           from salle.sets
@@ -67,17 +67,25 @@ export default handler({
     `
     if (!owner.length) return res.status(404).json({ error: 'Séance introuvable' })
 
+    // Renseigné uniquement pour les exercices hors programme : ceux du
+    // programme tirent leur nom de src/program.js, le dupliquer en base
+    // ferait diverger les deux au premier renommage.
+    const name = typeof b.exercise_name === 'string' && b.exercise_name.trim()
+      ? b.exercise_name.trim().slice(0, 80)
+      : null
+
     const rows = await sql`
       insert into salle.sets
-        (user_id, workout_id, exercise_key, set_index, weight, reps, rpe, performed_at)
+        (user_id, workout_id, exercise_key, exercise_name, set_index,
+         weight, reps, rpe, performed_at)
       values
-        (${user.id}, ${b.workout_id}, ${b.exercise_key}, ${Number(b.set_index)},
+        (${user.id}, ${b.workout_id}, ${b.exercise_key}, ${name}, ${Number(b.set_index)},
          ${num(b.weight)}, ${num(b.reps)}, ${num(b.rpe)}, ${b.performed_at})
       on conflict (workout_id, exercise_key, set_index)
         do update set weight = excluded.weight,
                       reps   = excluded.reps,
                       rpe    = excluded.rpe
-      returning id, workout_id, exercise_key, set_index,
+      returning id, workout_id, exercise_key, exercise_name, set_index,
                  weight::float8 as weight, reps, rpe::float8 as rpe,
                  performed_at::text as performed_at
     `

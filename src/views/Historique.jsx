@@ -97,7 +97,9 @@ export default function Historique() {
                     {Object.entries(byEx).map(([k, list]) => (
                       <tr key={k}>
                         <td style={{ fontVariantNumeric: 'normal' }}>
-                          {getExercise(k)?.name || k}
+                          {/* Les exercices ajoutés en séance ne sont pas dans
+                              program.js : leur libellé vient de la base. */}
+                          {getExercise(k)?.name || list[0]?.exercise_name || k}
                         </td>
                         <td>
                           {list

@@ -1,6 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { api } from '../api'
-import { PROGRAM, getDay } from '../program'
+import {
+  EXERCISES,
+  PROGRAM,
+  customExercise,
+  customKey,
+  getDay,
+  getExercise,
+} from '../program'
 import { parseDate, shiftDate, todayISO } from '../date'
 
 // Le programme est ancré sur les jours de la semaine. On s'en sert pour
@@ -31,6 +38,10 @@ export default function Seance({ onStartRest }) {
   const [workout, setWorkout] = useState(null)
   const [rows, setRows] = useState({}) // exKey -> [{ weight, reps, rpe, id }]
   const [last, setLast] = useState({}) // exKey -> { date, sets: [] }
+  // Exercices ajoutés en cours de séance, absents du plan du jour.
+  const [extras, setExtras] = useState([])
+  // Exercices hors programme déjà utilisés par le compte, pour les reproposer.
+  const [knownCustom, setKnownCustom] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
@@ -45,27 +56,52 @@ export default function Seance({ onStartRest }) {
     setLoading(true)
     setError(null)
     try {
-      const keys = day.exercises.map((e) => e.key)
+      const planned = day.exercises.map((e) => e.key)
 
-      const [allWorkouts, all] = await Promise.all([
-        api.workouts.list(),
-        api.sets.byExercises(keys),
-      ])
-
+      const allWorkouts = await api.workouts.list()
       const openWorkout =
         allWorkouts.find((w) => w.day_key === dayKey && w.date === date) || null
+
+      // Deux requêtes distinctes, et c'est nécessaire : la première ne ramène
+      // que les exercices du plan, elle ne peut donc pas voir ceux ajoutés à la
+      // volée. La seconde ramène tout le contenu réel de la séance ouverte.
+      const [plannedSets, sessionSets] = await Promise.all([
+        api.sets.byExercises(planned),
+        openWorkout ? api.sets.byWorkouts([openWorkout.id]) : Promise.resolve([]),
+      ])
+
+      // Exercices hors plan retrouvés dans la séance : on les réaffiche pour
+      // que rouvrir la séance ne les fasse pas disparaître.
+      const found = new Map()
+      for (const s of sessionSets) {
+        if (planned.includes(s.exercise_key) || found.has(s.exercise_key)) continue
+        found.set(
+          s.exercise_key,
+          getExercise(s.exercise_key) ||
+            customExercise(s.exercise_key, s.exercise_name || s.exercise_key)
+        )
+      }
+      const extraList = [...found.values()]
+
+      // Leur historique n'est pas dans plannedSets : sans ça, pas de rappel
+      // « dernière fois » sur un exercice ajouté.
+      const extraHistory = extraList.length
+        ? await api.sets.byExercises(extraList.map((e) => e.key))
+        : []
+
+      const all = [...plannedSets, ...extraHistory]
+
       setWorkout(openWorkout)
+      setExtras(extraList)
 
       // Séries déjà saisies pour la séance affichée
       const current = {}
-      if (openWorkout) {
-        for (const s of all.filter((x) => x.workout_id === openWorkout.id)) {
-          ;(current[s.exercise_key] ||= [])[s.set_index] = {
-            id: s.id,
-            weight: String(s.weight ?? ''),
-            reps: String(s.reps ?? ''),
-            rpe: s.rpe == null ? '' : String(s.rpe),
-          }
+      for (const s of sessionSets) {
+        ;(current[s.exercise_key] ||= [])[s.set_index] = {
+          id: s.id,
+          weight: String(s.weight ?? ''),
+          reps: String(s.reps ?? ''),
+          rpe: s.rpe == null ? '' : String(s.rpe),
         }
       }
 
@@ -93,6 +129,25 @@ export default function Seance({ onStartRest }) {
   useEffect(() => {
     load()
   }, [load])
+
+  // Chargé une fois : sert à reproposer une machine déjà utilisée un autre jour
+  // plutôt que d'en ressaisir le nom, ce qui créerait une clé différente.
+  useEffect(() => {
+    api.exercises
+      .custom()
+      .then(setKnownCustom)
+      .catch(() => setKnownCustom([])) // simple confort : ne doit rien bloquer
+  }, [])
+
+  function addExercise(ex) {
+    setExtras((list) => (list.some((e) => e.key === ex.key) ? list : [...list, ex]))
+  }
+
+  // Retirable tant qu'aucune série n'y est validée : au-delà, il faut dévalider
+  // les séries, pour ne pas effacer des données d'un simple clic.
+  function removeExtra(key) {
+    setExtras((list) => list.filter((e) => e.key !== key))
+  }
 
   // Forme fonctionnelle obligatoire : sans elle, tapoter la flèche plusieurs
   // fois de suite ne recule que d'un jour, chaque clic repartant de la date
@@ -130,6 +185,9 @@ export default function Seance({ onStartRest }) {
         reps,
         rpe: row.rpe ? parseFloat(String(row.rpe).replace(',', '.')) : null,
         performed_at: date,
+        // Seuls les exercices hors programme portent leur libellé : ceux du
+        // programme tirent le leur de src/program.js.
+        ...(ex.custom ? { exercise_name: ex.name } : null),
       }
 
       if (row.id) {
@@ -223,25 +281,166 @@ export default function Seance({ onStartRest }) {
       {loading ? (
         <div className="spinner">Chargement…</div>
       ) : (
-        <div className="card">
-          {day.exercises.map((ex) => (
-            <Exercice
-              key={ex.key}
-              ex={ex}
-              rows={rows[ex.key] || []}
-              last={last[ex.key]}
-              onField={(idx, f, v) => setField(ex.key, idx, f, v)}
-              onValidate={(idx) => validateSet(ex, idx)}
-              onUnvalidate={(idx) => unvalidateSet(ex, idx)}
-            />
-          ))}
-        </div>
+        <>
+          <div className="card">
+            {day.exercises.map((ex) => (
+              <Exercice
+                key={ex.key}
+                ex={ex}
+                rows={rows[ex.key] || []}
+                last={last[ex.key]}
+                onField={(idx, f, v) => setField(ex.key, idx, f, v)}
+                onValidate={(idx) => validateSet(ex, idx)}
+                onUnvalidate={(idx) => unvalidateSet(ex, idx)}
+              />
+            ))}
+          </div>
+
+          {extras.length > 0 && (
+            <>
+              <h2>Ajoutés à la séance</h2>
+              <div className="card">
+                {extras.map((ex) => (
+                  <Exercice
+                    key={ex.key}
+                    ex={ex}
+                    rows={rows[ex.key] || []}
+                    last={last[ex.key]}
+                    onField={(idx, f, v) => setField(ex.key, idx, f, v)}
+                    onValidate={(idx) => validateSet(ex, idx)}
+                    onUnvalidate={(idx) => unvalidateSet(ex, idx)}
+                    onRemove={
+                      (rows[ex.key] || []).some((r) => r?.id)
+                        ? null
+                        : () => removeExtra(ex.key)
+                    }
+                  />
+                ))}
+              </div>
+            </>
+          )}
+
+          <AjoutExercice
+            day={day}
+            extras={extras}
+            knownCustom={knownCustom}
+            onAdd={addExercise}
+          />
+        </>
       )}
     </>
   )
 }
 
-function Exercice({ ex, rows, last, onField, onValidate, onUnvalidate }) {
+/**
+ * Ajout d'un exercice absent du plan du jour — machine occupée, remplacement
+ * improvisé. Deux sources : le reste du programme (clés déjà connues, donc
+ * progression continue), ou un nom libre pour une machine que le programme
+ * ignore.
+ */
+function AjoutExercice({ day, extras, knownCustom, onAdd }) {
+  const [open, setOpen] = useState(false)
+  const [nom, setNom] = useState('')
+
+  const pris = new Set([...day.exercises.map((e) => e.key), ...extras.map((e) => e.key)])
+
+  const duProgramme = EXERCISES.filter((e) => !pris.has(e.key))
+  const dejaUtilises = knownCustom.filter((e) => !pris.has(e.exercise_key))
+
+  function ajouterLibre(e) {
+    e.preventDefault()
+    const key = customKey(nom)
+    if (!key) return
+    onAdd(customExercise(key, nom.trim()))
+    setNom('')
+    setOpen(false)
+  }
+
+  if (!open) {
+    return (
+      <button className="btn block" style={{ marginTop: 4 }} onClick={() => setOpen(true)}>
+        + Ajouter un exercice
+      </button>
+    )
+  }
+
+  return (
+    <div className="card">
+      <h3>Ajouter un exercice</h3>
+      <p className="tiny" style={{ marginTop: 4, marginBottom: 12 }}>
+        Machine occupée, matériel manquant : enregistre ce que tu as fait à la place. Ça ne
+        change rien au programme, seulement à cette séance.
+      </p>
+
+      <div className="field">
+        <label htmlFor="ajout-exo">Depuis ton programme ou tes habitudes</label>
+        <select
+          id="ajout-exo"
+          value=""
+          onChange={(e) => {
+            const [source, key] = e.target.value.split(':')
+            if (!key) return
+            if (source === 'prog') onAdd(getExercise(key))
+            else {
+              const c = knownCustom.find((x) => x.exercise_key === key)
+              onAdd(customExercise(key, c?.exercise_name || key))
+            }
+            setOpen(false)
+          }}
+        >
+          <option value="">Choisir…</option>
+          {dejaUtilises.length > 0 && (
+            <optgroup label="Déjà fait hors programme">
+              {dejaUtilises.map((e) => (
+                <option key={e.exercise_key} value={`libre:${e.exercise_key}`}>
+                  {e.exercise_name}
+                </option>
+              ))}
+            </optgroup>
+          )}
+          {PROGRAM.map((d) => {
+            const dispo = duProgramme.filter((e) => e.dayKey === d.key)
+            if (!dispo.length) return null
+            return (
+              <optgroup key={d.key} label={d.title}>
+                {dispo.map((e) => (
+                  <option key={e.key} value={`prog:${e.key}`}>
+                    {e.name}
+                  </option>
+                ))}
+              </optgroup>
+            )
+          })}
+        </select>
+      </div>
+
+      <form className="field" onSubmit={ajouterLibre}>
+        <label htmlFor="ajout-nom">Ou une machine absente du programme</label>
+        <input
+          id="ajout-nom"
+          type="text"
+          maxLength={80}
+          placeholder="Presse à cuisses horizontale"
+          value={nom}
+          onChange={(e) => setNom(e.target.value)}
+        />
+        <p className="tiny" style={{ marginTop: 6 }}>
+          Réutilise le même nom d'une fois sur l'autre : c'est lui qui relie les séances et
+          fait apparaître la courbe dans l'onglet Progression.
+        </p>
+        <button className="btn primary block" style={{ marginTop: 10 }} disabled={!customKey(nom)}>
+          Ajouter
+        </button>
+      </form>
+
+      <button className="btn ghost sm block" onClick={() => setOpen(false)}>
+        Annuler
+      </button>
+    </div>
+  )
+}
+
+function Exercice({ ex, rows, last, onField, onValidate, onUnvalidate, onRemove }) {
   const [open, setOpen] = useState(false)
 
   return (
@@ -259,6 +458,7 @@ function Exercice({ ex, rows, last, onField, onValidate, onUnvalidate }) {
           RPE {ex.rpe}
         </div>
       </div>
+
 
       <button className="btn ghost sm" style={{ padding: '4px 0', marginTop: 6 }} onClick={() => setOpen(!open)}>
         {open ? '− Masquer la consigne' : '+ Consigne technique'}
@@ -331,6 +531,19 @@ function Exercice({ ex, rows, last, onField, onValidate, onUnvalidate }) {
           )
         })}
       </div>
+
+      {/* En fin de bloc, à l'écart du bouton de consigne : c'est une action
+          destructive. Absent dès qu'une série est validée — il faut alors
+          dévalider explicitement, plutôt que perdre la saisie d'un clic. */}
+      {onRemove && (
+        <button
+          className="btn ghost sm danger"
+          style={{ paddingLeft: 0, marginTop: 10 }}
+          onClick={onRemove}
+        >
+          Retirer de la séance
+        </button>
+      )}
     </div>
   )
 }
