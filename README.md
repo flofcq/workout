@@ -110,6 +110,22 @@ qui peut donc en créer un — les données de chacun restent cloisonnées, mais
 veux rester seul utilisateur, supprime la route [`api/auth/signup.js`](api/auth/signup.js)
 une fois ton compte créé.
 
+### Mot de passe oublié
+
+Il n'y a pas de procédure de réinitialisation par email, et les mots de passe ne
+sont pas récupérables : la base ne contient que des hashs bcrypt, qui sont à sens
+unique. Utilise le script prévu pour ça :
+
+```bash
+vercel env pull .env                                        # récupère DATABASE_URL
+node --env-file=.env scripts/set-password.mjs toi@exemple.com nouveau-mot-de-passe
+```
+
+Il écrase le hash sans toucher au reste : **tes séances sont conservées**, puisque
+c'est le `user_id` qui les relie au compte et qu'il ne change pas. Ne supprime pas
+la ligne dans `users` pour recréer le compte — la clé étrangère est en
+`on delete cascade`, tout ton historique partirait avec.
+
 ---
 
 ## L'API
