@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { supabase } from '../supabase'
+import { api } from '../api'
 import { PROGRAM, getDay } from '../program'
 
 const todayISO = () => new Date().toISOString().slice(0, 10)
@@ -26,29 +26,14 @@ export default function Seance({ onStartRest }) {
     try {
       const keys = day.exercises.map((e) => e.key)
 
-      const [wRes, sRes] = await Promise.all([
-        supabase
-          .from('workouts')
-          .select('*')
-          .eq('day_key', dayKey)
-          .eq('date', todayISO())
-          .maybeSingle(),
-        supabase
-          .from('sets')
-          .select('id, exercise_key, set_index, weight, reps, rpe, performed_at, workout_id')
-          .in('exercise_key', keys)
-          .order('performed_at', { ascending: false })
-          .order('set_index', { ascending: true })
-          .limit(600),
+      const [allWorkouts, all] = await Promise.all([
+        api.workouts.list(),
+        api.sets.byExercises(keys),
       ])
 
-      if (wRes.error) throw wRes.error
-      if (sRes.error) throw sRes.error
-
-      const todaysWorkout = wRes.data
+      const todaysWorkout =
+        allWorkouts.find((w) => w.day_key === dayKey && w.date === todayISO()) || null
       setWorkout(todaysWorkout)
-
-      const all = sRes.data || []
 
       // Séries déjà saisies aujourd'hui pour cette séance
       const current = {}
@@ -86,14 +71,9 @@ export default function Seance({ onStartRest }) {
 
   async function ensureWorkout() {
     if (workout) return workout
-    const { data, error } = await supabase
-      .from('workouts')
-      .insert({ day_key: dayKey, date: todayISO() })
-      .select()
-      .single()
-    if (error) throw error
-    setWorkout(data)
-    return data
+    const created = await api.workouts.create(dayKey, todayISO())
+    setWorkout(created)
+    return created
   }
 
   function setField(exKey, idx, field, value) {
@@ -123,12 +103,10 @@ export default function Seance({ onStartRest }) {
       }
 
       if (row.id) {
-        const { error } = await supabase.from('sets').update(payload).eq('id', row.id)
-        if (error) throw error
+        await api.sets.update(row.id, payload)
       } else {
-        const { data, error } = await supabase.from('sets').insert(payload).select().single()
-        if (error) throw error
-        setField(ex.key, idx, 'id', data.id)
+        const created = await api.sets.create(payload)
+        setField(ex.key, idx, 'id', created.id)
         onStartRest(ex.rest, ex.name)
       }
     } catch (e) {
@@ -139,9 +117,12 @@ export default function Seance({ onStartRest }) {
   async function unvalidateSet(ex, idx) {
     const row = rows[ex.key]?.[idx]
     if (!row?.id) return
-    const { error } = await supabase.from('sets').delete().eq('id', row.id)
-    if (error) return setError(error.message)
-    setField(ex.key, idx, 'id', undefined)
+    try {
+      await api.sets.remove(row.id)
+      setField(ex.key, idx, 'id', undefined)
+    } catch (e) {
+      setError(e.message)
+    }
   }
 
   const doneCount = Object.values(rows).flat().filter((r) => r?.id).length

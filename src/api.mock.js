@@ -1,0 +1,83 @@
+// Client API simulé — sert uniquement à prévisualiser l'interface sans base
+// de données. Activé par VITE_DEMO=1. Aucune donnée n'est persistée : les
+// écritures renvoient une réponse plausible et sont oubliées au rechargement.
+
+const today = new Date()
+const iso = (d) => d.toISOString().slice(0, 10)
+const daysAgo = (n) => iso(new Date(today.getTime() - n * 86400000))
+
+const workouts = [
+  { id: 'w1', day_key: 'j1', date: daysAgo(21) },
+  { id: 'w2', day_key: 'j1', date: daysAgo(14) },
+  { id: 'w3', day_key: 'j1', date: daysAgo(7) },
+  { id: 'w4', day_key: 'j4', date: daysAgo(4) },
+]
+
+const sets = [
+  ...[
+    ['w1', 21, 82.5], ['w2', 14, 85], ['w3', 7, 87.5],
+  ].flatMap(([w, d, kg]) =>
+    [0, 1, 2, 3].map((i) => ({
+      id: `${w}-dc-${i}`, workout_id: w, exercise_key: 'dc_barre', set_index: i,
+      weight: kg, reps: 6 - (i > 1 ? 1 : 0), rpe: 8, performed_at: daysAgo(d),
+    }))
+  ),
+  ...[
+    ['w1', 21, 30], ['w2', 14, 30], ['w3', 7, 32.5],
+  ].flatMap(([w, d, kg]) =>
+    [0, 1, 2].map((i) => ({
+      id: `${w}-di-${i}`, workout_id: w, exercise_key: 'di_halteres', set_index: i,
+      weight: kg, reps: 10 - i, rpe: 8, performed_at: daysAgo(d),
+    }))
+  ),
+  ...[0, 1, 2, 3].map((i) => ({
+    id: `w4-dib-${i}`, workout_id: 'w4', exercise_key: 'di_barre', set_index: i,
+    weight: 62.5, reps: 8 - (i > 1 ? 1 : 0), rpe: 8, performed_at: daysAgo(4),
+  })),
+]
+
+const body = [24, 17, 10, 3].map((d, i) => ({
+  id: `b${i}`, date: daysAgo(d),
+  weight: [84.2, 83.4, 82.9, 82.1][i],
+  chest: [104, 104, 103.5, 103.5][i],
+  waist: [88, 87, 86.5, 85.5][i],
+  arm: [38.5, 38.5, 38, 38][i],
+  thigh: [60, 59.5, 59.5, 59][i],
+}))
+
+const ok = (value) => Promise.resolve(value)
+
+// Même tri que la vraie route /api/sets, dont la vue Séance dépend pour
+// retrouver la dernière performance.
+const sorted = (list) =>
+  [...list].sort(
+    (a, b) => b.performed_at.localeCompare(a.performed_at) || a.set_index - b.set_index
+  )
+
+export const mockApi = {
+  auth: {
+    me: () => ok({ id: 'demo', email: 'demo@exemple.com' }),
+    login: () => ok({ id: 'demo', email: 'demo@exemple.com' }),
+    signup: () => ok({ id: 'demo', email: 'demo@exemple.com' }),
+    logout: () => ok({ ok: true }),
+  },
+
+  workouts: {
+    list: () => ok([...workouts].sort((a, b) => b.date.localeCompare(a.date))),
+    create: (dayKey, date) => ok({ id: `tmp-${dayKey}-${date}`, day_key: dayKey, date }),
+    remove: () => ok({ ok: true }),
+  },
+
+  sets: {
+    byExercises: (keys) => ok(sorted(sets.filter((s) => keys.includes(s.exercise_key)))),
+    byWorkouts: (ids) => ok(sorted(sets.filter((s) => ids.includes(s.workout_id)))),
+    create: (payload) => ok({ ...payload, id: `tmp-${Math.random().toString(36).slice(2)}` }),
+    update: (id, payload) => ok({ ...payload, id }),
+    remove: () => ok({ ok: true }),
+  },
+
+  body: {
+    list: () => ok([...body].sort((a, b) => a.date.localeCompare(b.date))),
+    save: (payload) => ok({ ...payload, id: `tmp-${payload.date}` }),
+  },
+}

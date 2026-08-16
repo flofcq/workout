@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { supabase } from '../supabase'
+import { api } from '../api'
 import { EXERCISES, estimate1RM, getExercise } from '../program'
 import LineChartCard from '../components/LineChartCard'
 
@@ -9,6 +9,7 @@ export default function Progression() {
   const [exKey, setExKey] = useState(STARRED[0]?.key || EXERCISES[0].key)
   const [sets, setSets] = useState([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
   const [mode, setMode] = useState('top') // 'top' = série la plus lourde · 'e1rm' = 1RM estimé
   const [showTable, setShowTable] = useState(false)
 
@@ -17,15 +18,17 @@ export default function Progression() {
   useEffect(() => {
     let cancelled = false
     setLoading(true)
-    supabase
-      .from('sets')
-      .select('weight, reps, rpe, set_index, performed_at')
-      .eq('exercise_key', exKey)
-      .order('performed_at', { ascending: true })
-      .then(({ data, error }) => {
-        if (cancelled) return
-        if (!error) setSets(data || [])
-        setLoading(false)
+    setError(null)
+    api.sets
+      .byExercises([exKey])
+      .then((data) => {
+        if (!cancelled) setSets(data)
+      })
+      .catch((e) => {
+        if (!cancelled) setError(e.message)
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
       })
     return () => {
       cancelled = true
@@ -80,6 +83,8 @@ export default function Progression() {
         En déficit calorique, maintenir tes charges est déjà un succès. Une courbe plate n'est pas
         un échec.
       </p>
+
+      {error && <div className="banner">Erreur : {error}</div>}
 
       <div className="field">
         <label htmlFor="exo">Exercice</label>

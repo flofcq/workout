@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { supabase } from '../supabase'
+import { api } from '../api'
 import LineChartCard from '../components/LineChartCard'
 
 const FIELDS = [
@@ -21,15 +21,11 @@ export default function Corps() {
   const [error, setError] = useState(null)
 
   useEffect(() => {
-    supabase
-      .from('body_metrics')
-      .select('*')
-      .order('date', { ascending: true })
-      .then(({ data, error }) => {
-        if (error) setError(error.message)
-        else setEntries(data || [])
-        setLoading(false)
-      })
+    api.body
+      .list()
+      .then(setEntries)
+      .catch((e) => setError(e.message))
+      .finally(() => setLoading(false))
   }, [])
 
   async function save(e) {
@@ -41,18 +37,18 @@ export default function Corps() {
       const v = form[f.key]
       payload[f.key] = v === '' || v == null ? null : parseFloat(String(v).replace(',', '.'))
     }
-    const { data, error } = await supabase
-      .from('body_metrics')
-      .upsert(payload, { onConflict: 'user_id,date' })
-      .select()
-      .single()
-    setSaving(false)
-    if (error) return setError(error.message)
-    setEntries((list) => {
-      const rest = list.filter((x) => x.date !== data.date)
-      return [...rest, data].sort((a, b) => a.date.localeCompare(b.date))
-    })
-    setForm({ date: todayISO() })
+    try {
+      const saved = await api.body.save(payload)
+      setEntries((list) => {
+        const rest = list.filter((x) => x.date !== saved.date)
+        return [...rest, saved].sort((a, b) => a.date.localeCompare(b.date))
+      })
+      setForm({ date: todayISO() })
+    } catch (e2) {
+      setError(e2.message)
+    } finally {
+      setSaving(false)
+    }
   }
 
   const series = useMemo(

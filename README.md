@@ -8,7 +8,26 @@ Application web pour enregistrer tes séances et tes charges, avec le programme
 - **Progression** — courbes d'évolution par exercice (charge la plus lourde ou 1RM estimé).
 - **Corps** — poids et mensurations dans le temps.
 
-Fonctionne sur téléphone, synchronisé entre appareils via Supabase.
+Fonctionne sur téléphone, synchronisé entre appareils.
+
+---
+
+## Architecture
+
+```
+Navigateur (React + Vite)
+        │  fetch('/api/…')  — cookie de session httpOnly
+        ▼
+Fonctions serverless Vercel  (dossier api/)
+        │  SQL
+        ▼
+Neon (Postgres)
+```
+
+Le navigateur ne parle **jamais** à la base directement : il n'en connaît ni
+l'adresse ni les identifiants. Toute requête passe par une fonction serverless
+qui vérifie la session et filtre sur l'utilisateur connecté. C'est là qu'est
+l'isolation entre comptes — pas dans des règles au niveau de la base.
 
 ---
 
@@ -27,53 +46,49 @@ d'investir 10 minutes dans la configuration.
 
 ## 2. Créer la base de données
 
-1. Va sur [supabase.com](https://supabase.com) et crée un projet gratuit.
-2. Dans le menu de gauche, ouvre **SQL Editor** → **New query**.
-3. Copie tout le contenu de [`supabase/schema.sql`](supabase/schema.sql), colle-le, clique **Run**.
+1. Crée un projet gratuit sur [neon.com](https://neon.com). Depuis Vercel, tu peux
+   aussi passer par l'onglet **Storage → Create Database → Neon** : les variables
+   d'environnement sont alors branchées automatiquement sur le projet.
+2. Ouvre le **SQL Editor** de ton projet Neon.
+3. Copie tout le contenu de [`db/schema.sql`](db/schema.sql), colle-le, exécute.
 
-Ça crée trois tables (`workouts`, `sets`, `body_metrics`) avec les politiques de
-sécurité qui garantissent que tu es le seul à voir tes données.
-
-### Autoriser la connexion par email
-
-Dans **Authentication → Sign In / Providers**, vérifie que **Email** est activé.
-L'app utilise les liens magiques : pas de mot de passe à retenir.
-
-Dans **Authentication → URL Configuration**, ajoute l'URL de ton site déployé
-dans **Redirect URLs** (par exemple `https://suivi-salle.vercel.app/**`), sinon
-le lien reçu par mail ne te ramènera pas au bon endroit.
+Ça crée quatre tables : `users`, `workouts`, `sets`, `body_metrics`.
 
 ---
 
 ## 3. Brancher l'app sur ta base
 
-Dans Supabase, va dans **Project Settings → Data API** et récupère l'URL du projet
-et la clé publique `anon`.
-
 ```bash
 cp .env.example .env
 ```
 
-Puis remplis :
+Puis remplis les deux variables :
 
-```
-VITE_SUPABASE_URL=https://xxxxxxxx.supabase.co
-VITE_SUPABASE_ANON_KEY=eyJhbGciOi...
-```
+| Variable | Où la trouver |
+|---|---|
+| `DATABASE_URL` | Neon → ton projet → **Connection string**, version *pooled* |
+| `AUTH_SECRET` | à générer toi-même : `openssl rand -base64 32` |
 
-La clé `anon` est publique par nature — c'est normal qu'elle soit visible dans le
-navigateur. Ce sont les politiques RLS du schéma qui protègent tes données. Ne
-mets **jamais** la clé `service_role` dans ce fichier.
+Ces deux variables n'ont **pas** le préfixe `VITE_`, et il ne faut pas l'ajouter :
+c'est précisément ce préfixe qui ferait embarquer leur valeur dans le JavaScript
+envoyé au navigateur. Elles doivent rester côté serveur.
+
+### Lancer en local
 
 ```bash
 npm run dev
 ```
 
+Ce script utilise `vercel dev`, qui sert à la fois le front Vite et les fonctions
+du dossier `api/` — un simple `vite` ne servirait que le front, et tous les
+appels `/api/…` renverraient 404. La première exécution demande de lier le
+dossier à un projet Vercel.
+
+`npm run dev:ui` lance Vite seul, utile pour travailler sur du CSS sans base.
+
 ---
 
 ## 4. Déployer
-
-### Vercel
 
 ```bash
 npm i -g vercel
@@ -81,15 +96,37 @@ vercel
 ```
 
 Puis, dans le dashboard Vercel → **Settings → Environment Variables**, ajoute
-`VITE_SUPABASE_URL` et `VITE_SUPABASE_ANON_KEY`, et redéploie.
-
-### Netlify
-
-Build command `npm run build`, publish directory `dist`, et les deux mêmes
-variables d'environnement.
+`DATABASE_URL` et `AUTH_SECRET` (si tu as créé la base depuis l'onglet Storage,
+`DATABASE_URL` y est déjà), et redéploie.
 
 Une fois déployé, ouvre le site sur ton téléphone et **ajoute-le à l'écran
 d'accueil** : il s'ouvrira en plein écran comme une application.
+
+### Créer ton compte
+
+À la première visite, clique sur **Créer un compte**. Il n'y a pas de validation
+par email : le compte est actif immédiatement. Si l'app est publique, n'importe
+qui peut donc en créer un — les données de chacun restent cloisonnées, mais si tu
+veux rester seul utilisateur, supprime la route [`api/auth/signup.js`](api/auth/signup.js)
+une fois ton compte créé.
+
+---
+
+## L'API
+
+Toutes les routes exigent une session valide, sauf `signup` et `login`.
+
+| Route | Méthodes | Rôle |
+|---|---|---|
+| `/api/auth/signup` | `POST` | Crée un compte et ouvre la session |
+| `/api/auth/login` | `POST` | Ouvre la session |
+| `/api/auth/logout` | `POST` | Ferme la session |
+| `/api/auth/me` | `GET` | Utilisateur courant, ou `null` |
+| `/api/workouts` | `GET` `POST` | Liste (60 dernières) · crée la séance du jour |
+| `/api/workouts/:id` | `DELETE` | Supprime une séance et ses séries |
+| `/api/sets` | `GET` `POST` | Filtre `?exercises=` ou `?workouts=` · enregistre une série |
+| `/api/sets/:id` | `PATCH` `DELETE` | Modifie · supprime une série |
+| `/api/body-metrics` | `GET` `PUT` | Liste · enregistre une mesure (une par jour) |
 
 ---
 
@@ -117,7 +154,16 @@ Pour ajouter un exercice, copie un bloc existant et donne-lui une clé inédite 
 
 ## Notes techniques
 
-- **Stack** : React 19 + Vite, Supabase (Postgres + Auth), Recharts.
+- **Stack** : React 19 + Vite, fonctions serverless Vercel, Neon (Postgres), Recharts.
+- **Sessions** : JWT signé (HS256) dans un cookie `httpOnly` `SameSite=Lax`, valable
+  60 jours. Invisible au JavaScript de la page, donc inexploitable par une injection
+  de script.
+- **Mots de passe** : hachés avec bcrypt (coût 10). Une tentative de connexion sur un
+  email inconnu compare quand même un hash factice, pour que le temps de réponse ne
+  révèle pas quels comptes existent.
+- **Types SQL** : les colonnes `numeric` et `date` sont castées en `float8` / `text`
+  dans les requêtes. Sans ça, Postgres renvoie les charges en chaînes de caractères
+  et les comparaisons de progression (`s.weight > cur.top`) deviennent lexicographiques.
 - **Graphiques** : une seule série par graphique, jamais deux axes Y. La couleur
   de série (`--series-1`) est validée pour le contraste et la lisibilité en vision
   des couleurs déficiente, en mode clair comme en mode sombre.

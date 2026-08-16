@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { supabase, isConfigured } from './supabase'
+import { useCallback, useEffect, useState } from 'react'
+import { api, ApiError } from './api'
 import Seance from './views/Seance'
 import Historique from './views/Historique'
 import Progression from './views/Progression'
@@ -14,31 +14,34 @@ const TABS = [
 ]
 
 export default function App() {
-  const [session, setSession] = useState(null)
+  const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [serverDown, setServerDown] = useState(false)
   const [tab, setTab] = useState('seance')
   const [timer, setTimer] = useState(null) // { seconds, label, id }
 
   useEffect(() => {
-    if (!isConfigured) {
-      setLoading(false)
-      return
-    }
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session)
-      setLoading(false)
-    })
-    const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => setSession(s))
-    return () => sub.subscription.unsubscribe()
+    api.auth
+      .me()
+      .then(setUser)
+      // Une 500 ici veut presque toujours dire que DATABASE_URL ou AUTH_SECRET
+      // manque : l'API ne démarre pas. On le distingue d'un simple « pas connecté ».
+      .catch(() => setServerDown(true))
+      .finally(() => setLoading(false))
   }, [])
 
-  function startRest(seconds, label) {
+  const startRest = useCallback((seconds, label) => {
     setTimer({ seconds, label, id: Date.now() })
+  }, [])
+
+  async function logout() {
+    await api.auth.logout()
+    setUser(null)
   }
 
-  if (!isConfigured) return <SetupNeeded />
   if (loading) return <div className="spinner">Chargement…</div>
-  if (!session) return <Login />
+  if (serverDown) return <SetupNeeded />
+  if (!user) return <Login onAuth={setUser} />
 
   return (
     <>
@@ -47,7 +50,7 @@ export default function App() {
           <div className="brand">
             Suivi <span>salle</span>
           </div>
-          <button className="btn ghost sm" onClick={() => supabase.auth.signOut()}>
+          <button className="btn ghost sm" onClick={logout}>
             Déconnexion
           </button>
         </div>
@@ -84,60 +87,83 @@ export default function App() {
   )
 }
 
-function Login() {
+function Login({ onAuth }) {
+  const [mode, setMode] = useState('login') // 'login' | 'signup'
   const [email, setEmail] = useState('')
-  const [sent, setSent] = useState(false)
+  const [password, setPassword] = useState('')
   const [err, setErr] = useState(null)
   const [busy, setBusy] = useState(false)
+
+  const signup = mode === 'signup'
 
   async function submit(e) {
     e.preventDefault()
     setBusy(true)
     setErr(null)
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: { emailRedirectTo: window.location.origin },
-    })
-    setBusy(false)
-    if (error) setErr(error.message)
-    else setSent(true)
+    try {
+      const u = signup ? await api.auth.signup(email, password) : await api.auth.login(email, password)
+      onAuth(u)
+    } catch (e2) {
+      setErr(e2 instanceof ApiError ? e2.message : 'Une erreur est survenue')
+      setBusy(false)
+    }
   }
 
   return (
     <div className="app" style={{ maxWidth: 400, paddingTop: 60 }}>
       <h1>Suivi salle</h1>
       <p className="sub" style={{ marginBottom: 22 }}>
-        Connecte-toi pour retrouver tes séances sur tous tes appareils.
+        {signup
+          ? 'Crée ton compte pour enregistrer tes séances.'
+          : 'Connecte-toi pour retrouver tes séances sur tous tes appareils.'}
       </p>
 
-      {sent ? (
-        <div className="card">
-          <h3>Regarde tes mails</h3>
-          <p className="tiny" style={{ marginTop: 6 }}>
-            Un lien de connexion a été envoyé à <b>{email}</b>. Ouvre-le sur l'appareil que tu
-            veux utiliser en salle — pas besoin de mot de passe.
-          </p>
+      <form className="card" onSubmit={submit}>
+        <div className="field">
+          <label htmlFor="email">Adresse email</label>
+          <input
+            id="email"
+            type="email"
+            required
+            autoComplete="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="toi@exemple.com"
+          />
         </div>
-      ) : (
-        <form className="card" onSubmit={submit}>
-          <div className="field">
-            <label htmlFor="email">Adresse email</label>
-            <input
-              id="email"
-              type="email"
-              required
-              autoComplete="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="toi@exemple.com"
-            />
-          </div>
-          {err && <p className="tiny" style={{ color: 'var(--danger)' }}>{err}</p>}
-          <button className="btn primary block" disabled={busy}>
-            {busy ? 'Envoi…' : 'Recevoir un lien de connexion'}
-          </button>
-        </form>
-      )}
+
+        <div className="field">
+          <label htmlFor="password">Mot de passe</label>
+          <input
+            id="password"
+            type="password"
+            required
+            minLength={8}
+            autoComplete={signup ? 'new-password' : 'current-password'}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder={signup ? '8 caractères minimum' : '••••••••'}
+          />
+        </div>
+
+        {err && <p className="tiny" style={{ color: 'var(--danger)' }}>{err}</p>}
+
+        <button className="btn primary block" disabled={busy}>
+          {busy ? 'Un instant…' : signup ? 'Créer mon compte' : 'Se connecter'}
+        </button>
+
+        <button
+          type="button"
+          className="btn ghost sm"
+          style={{ marginTop: 10 }}
+          onClick={() => {
+            setMode(signup ? 'login' : 'signup')
+            setErr(null)
+          }}
+        >
+          {signup ? "J'ai déjà un compte" : 'Créer un compte'}
+        </button>
+      </form>
     </div>
   )
 }
@@ -147,20 +173,20 @@ function SetupNeeded() {
     <div className="app" style={{ maxWidth: 520, paddingTop: 50 }}>
       <h1>Configuration requise</h1>
       <p className="sub" style={{ marginBottom: 18 }}>
-        L'application n'est pas encore reliée à ta base Supabase.
+        L'API ne répond pas. Il lui manque probablement sa base ou sa clé de session.
       </p>
       <div className="card">
         <h3>Ce qu'il te reste à faire</h3>
         <ol className="tiny" style={{ paddingLeft: 18, marginTop: 10, lineHeight: 1.7 }}>
-          <li>Crée un projet gratuit sur supabase.com</li>
+          <li>Crée une base gratuite sur neon.com (ou via l'onglet Storage de Vercel)</li>
           <li>
-            Colle le contenu de <code>supabase/schema.sql</code> dans le SQL Editor et exécute-le
+            Colle le contenu de <code>db/schema.sql</code> dans le SQL Editor et exécute-le
           </li>
           <li>
-            Copie <code>.env.example</code> vers <code>.env</code> et renseigne{' '}
-            <code>VITE_SUPABASE_URL</code> et <code>VITE_SUPABASE_ANON_KEY</code>
+            Renseigne <code>DATABASE_URL</code> et <code>AUTH_SECRET</code> dans les variables
+            d'environnement de Vercel
           </li>
-          <li>Relance le serveur de dev</li>
+          <li>Redéploie</li>
         </ol>
         <p className="tiny" style={{ marginTop: 12 }}>
           Les étapes détaillées sont dans le README.

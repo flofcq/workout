@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { supabase } from '../supabase'
+import { api } from '../api'
 import { getDay, getExercise } from '../program'
 
 export default function Historique() {
@@ -7,36 +7,35 @@ export default function Historique() {
   const [setsByWorkout, setSetsByWorkout] = useState({})
   const [openId, setOpenId] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
 
   useEffect(() => {
     async function load() {
-      const { data: ws } = await supabase
-        .from('workouts')
-        .select('*')
-        .order('date', { ascending: false })
-        .limit(60)
+      try {
+        const ws = await api.workouts.list()
+        const sets = await api.sets.byWorkouts(ws.map((w) => w.id))
 
-      const ids = (ws || []).map((w) => w.id)
-      let grouped = {}
-      if (ids.length) {
-        const { data: ss } = await supabase
-          .from('sets')
-          .select('*')
-          .in('workout_id', ids)
-          .order('set_index', { ascending: true })
-        for (const s of ss || []) (grouped[s.workout_id] ||= []).push(s)
+        const grouped = {}
+        for (const s of sets) (grouped[s.workout_id] ||= []).push(s)
+
+        setWorkouts(ws)
+        setSetsByWorkout(grouped)
+      } catch (e) {
+        setError(e.message)
+      } finally {
+        setLoading(false)
       }
-
-      setWorkouts(ws || [])
-      setSetsByWorkout(grouped)
-      setLoading(false)
     }
     load()
   }, [])
 
   async function remove(id) {
-    await supabase.from('workouts').delete().eq('id', id)
-    setWorkouts((w) => w.filter((x) => x.id !== id))
+    try {
+      await api.workouts.remove(id)
+      setWorkouts((w) => w.filter((x) => x.id !== id))
+    } catch (e) {
+      setError(e.message)
+    }
   }
 
   if (loading) return <div className="spinner">Chargement…</div>
@@ -44,6 +43,7 @@ export default function Historique() {
   return (
     <>
       <h1>Historique</h1>
+      {error && <div className="banner">Erreur : {error}</div>}
       <p className="sub" style={{ marginBottom: 14 }}>
         {workouts.length} séance{workouts.length > 1 ? 's' : ''} enregistrée
         {workouts.length > 1 ? 's' : ''}.
