@@ -10,7 +10,7 @@ export default handler({
     const rows = await sql`
       select id, date::text as date, weight::float8 as weight, chest::float8 as chest,
              waist::float8 as waist, arm::float8 as arm, thigh::float8 as thigh, notes
-      from body_metrics
+      from salle.body_metrics
       where user_id = ${user.id}
       order by date asc
     `
@@ -26,7 +26,7 @@ export default handler({
     if (!b.date) return res.status(400).json({ error: 'date requise' })
 
     const rows = await sql`
-      insert into body_metrics (user_id, date, weight, chest, waist, arm, thigh)
+      insert into salle.body_metrics (user_id, date, weight, chest, waist, arm, thigh)
       values (${user.id}, ${b.date}, ${num(b.weight)}, ${num(b.chest)},
               ${num(b.waist)}, ${num(b.arm)}, ${num(b.thigh)})
       on conflict (user_id, date)

@@ -14,7 +14,7 @@ export default handler({
     const password = String(req.body?.password || '')
 
     const rows = await sql`
-      select id, email, password_hash from users where email = ${email}
+      select id, email, password_hash from salle.users where email = ${email}
     `
     const user = rows[0]
     const ok = await bcrypt.compare(password, user?.password_hash || DUMMY_HASH)

@@ -9,7 +9,7 @@ export default handler({
 
     const b = req.body || {}
     const rows = await sql`
-      update sets
+      update salle.sets
       set weight = ${num(b.weight)},
           reps   = ${num(b.reps)},
           rpe    = ${num(b.rpe)}
@@ -27,7 +27,7 @@ export default handler({
     if (!user) return
 
     const rows = await sql`
-      delete from sets
+      delete from salle.sets
       where id = ${req.query.id} and user_id = ${user.id}
       returning id
     `

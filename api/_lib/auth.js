@@ -56,7 +56,7 @@ export async function getUser(req) {
   if (!token) return null
   try {
     const { payload } = await jwtVerify(token, secret)
-    const rows = await sql`select id, email from users where id = ${payload.sub}`
+    const rows = await sql`select id, email from salle.users where id = ${payload.sub}`
     return rows[0] || null
   } catch {
     // Token expiré, signature invalide, utilisateur supprimé : pas de session.

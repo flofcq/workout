@@ -31,7 +31,7 @@ export default handler({
           select id, workout_id, exercise_key, set_index,
                  weight::float8 as weight, reps, rpe::float8 as rpe,
                  performed_at::text as performed_at
-          from sets
+          from salle.sets
           where user_id = ${user.id} and exercise_key = any(${exercises})
           order by performed_at desc, set_index asc
           limit 600
@@ -40,7 +40,7 @@ export default handler({
           select id, workout_id, exercise_key, set_index,
                  weight::float8 as weight, reps, rpe::float8 as rpe,
                  performed_at::text as performed_at
-          from sets
+          from salle.sets
           where user_id = ${user.id} and workout_id = any(${workouts}::uuid[])
           order by performed_at desc, set_index asc
           limit 2000
@@ -63,12 +63,12 @@ export default handler({
     // La séance doit appartenir à l'utilisateur, sinon on écrirait des séries
     // dans la séance de quelqu'un d'autre.
     const owner = await sql`
-      select id from workouts where id = ${b.workout_id} and user_id = ${user.id}
+      select id from salle.workouts where id = ${b.workout_id} and user_id = ${user.id}
     `
     if (!owner.length) return res.status(404).json({ error: 'Séance introuvable' })
 
     const rows = await sql`
-      insert into sets
+      insert into salle.sets
         (user_id, workout_id, exercise_key, set_index, weight, reps, rpe, performed_at)
       values
         (${user.id}, ${b.workout_id}, ${b.exercise_key}, ${Number(b.set_index)},

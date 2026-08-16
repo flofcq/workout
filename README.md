@@ -53,15 +53,23 @@ d'investir 10 minutes dans la configuration.
 2. Ouvre le **SQL Editor** de ton projet Neon.
 3. Copie tout le contenu de [`db/schema.sql`](db/schema.sql), colle-le, exécute.
 
-Ça crée quatre tables : `users`, `workouts`, `sets`, `body_metrics`. Le fichier
-est rejouable autant de fois que tu veux : tout est en `if not exists`, rien
-n'est supprimé.
+Ça crée un schéma `salle` contenant quatre tables : `salle.users`,
+`salle.workouts`, `salle.sets`, `salle.body_metrics`. Le fichier est rejouable
+autant de fois que tu veux : tout est en `if not exists`, rien n'est supprimé.
 
-> Le schéma est enveloppé dans un bloc `DO $$ … $$`. Ce n'est pas cosmétique :
-> le SQL Editor de Neon envoie l'onglet comme une requête préparée, et Postgres
-> rejette alors plusieurs commandes séparées par `;` — « cannot insert multiple
-> commands into a prepared statement ». Le bloc n'en envoie qu'une seule. Ça ne
-> change rien pour `psql`, qui exécute le fichier tel quel.
+> **Un schéma dédié, pas `public`.** Une base Neon peut héberger plusieurs de
+> tes applications. Une table `users` dans `public` entre alors en collision
+> avec celle d'un autre projet : au mieux la création échoue sur une clé
+> étrangère (`foreign key constraint … cannot be implemented`, quand les `id`
+> ne sont pas du même type), au pire les comptes se mélangent. Ranger cette app
+> dans `salle` la rend inoffensive pour ses voisines — et réciproquement.
+> Toutes les requêtes de `api/` qualifient leurs tables en conséquence.
+
+> **Un bloc `DO $$ … $$`, pas une suite d'instructions.** Le SQL Editor de Neon
+> envoie l'onglet comme une requête préparée, et Postgres rejette alors
+> plusieurs commandes séparées par `;` — « cannot insert multiple commands into
+> a prepared statement ». Le bloc n'en envoie qu'une seule. Ça ne change rien
+> pour `psql`, qui exécute le fichier tel quel.
 
 ---
 
@@ -129,10 +137,10 @@ unique. Trois façons de s'en sortir, de la plus simple à la plus prudente.
 « Créer un compte » sur le site :
 
 ```sql
-delete from users where email = 'toi@exemple.com';
+delete from salle.users where email = 'toi@exemple.com';
 ```
 
-⚠️ À ne pas faire si tu as des séances : `workouts.user_id` est en
+⚠️ À ne pas faire si tu as des séances : `salle.workouts.user_id` est en
 `on delete cascade`, tout l'historique partirait avec.
 
 **Si tu as des séances** — réécris seulement le hash, toujours depuis le SQL
@@ -140,7 +148,7 @@ Editor. Postgres sait générer un hash bcrypt, que l'app vérifie sans souci :
 
 ```sql
 create extension if not exists pgcrypto;
-update users set password_hash = crypt('nouveau-mot-de-passe', gen_salt('bf', 10))
+update salle.users set password_hash = crypt('nouveau-mot-de-passe', gen_salt('bf', 10))
 where email = 'toi@exemple.com';
 ```
 

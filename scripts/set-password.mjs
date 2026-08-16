@@ -39,17 +39,17 @@ const normalized = email.trim().toLowerCase()
 const hash = await bcrypt.hash(password, 10)
 
 const updated = await sql`
-  update users set password_hash = ${hash} where email = ${normalized} returning id
+  update salle.users set password_hash = ${hash} where email = ${normalized} returning id
 `
 
 if (updated.length) {
   const [{ count }] = await sql`
-    select count(*)::int as count from workouts where user_id = ${updated[0].id}
+    select count(*)::int as count from salle.workouts where user_id = ${updated[0].id}
   `
   console.log(`✓ Mot de passe redéfini pour ${normalized}`)
   console.log(`  ${count} séance(s) conservée(s).`)
 } else {
-  await sql`insert into users (email, password_hash) values (${normalized}, ${hash})`
+  await sql`insert into salle.users (email, password_hash) values (${normalized}, ${hash})`
   console.log(`✓ Compte créé pour ${normalized} (il n'existait pas encore).`)
 }
 

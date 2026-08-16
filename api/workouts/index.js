@@ -9,7 +9,7 @@ export default handler({
 
     const rows = await sql`
       select id, day_key, date::text as date, notes
-      from workouts
+      from salle.workouts
       where user_id = ${user.id}
       order by date desc
       limit 60
@@ -30,7 +30,7 @@ export default handler({
     // La séance du jour peut déjà exister (deux onglets ouverts, double clic).
     // L'upsert renvoie la ligne existante au lieu d'échouer sur la contrainte.
     const rows = await sql`
-      insert into workouts (user_id, day_key, date)
+      insert into salle.workouts (user_id, day_key, date)
       values (${user.id}, ${dayKey}, ${date})
       on conflict (user_id, day_key, date)
         do update set day_key = excluded.day_key

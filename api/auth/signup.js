@@ -20,7 +20,7 @@ export default handler({
     // `on conflict do nothing` : si l'email existe déjà, aucune ligne n'est
     // renvoyée. On évite ainsi la course entre un SELECT et un INSERT.
     const rows = await sql`
-      insert into users (email, password_hash)
+      insert into salle.users (email, password_hash)
       values (${email}, ${hash})
       on conflict (email) do nothing
       returning id, email

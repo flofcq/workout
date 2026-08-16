@@ -11,7 +11,7 @@ export default handler({
     // connecté pourrait supprimer la séance d'un autre en devinant son id.
     // Les séries associées partent avec, via le on delete cascade.
     const rows = await sql`
-      delete from workouts
+      delete from salle.workouts
       where id = ${req.query.id} and user_id = ${user.id}
       returning id
     `
