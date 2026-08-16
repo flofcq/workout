@@ -8,6 +8,7 @@
     "demo": "vite --mode demo",
     "build": "vite build",
     "lint": "oxlint",
+    "test:steps": "node scripts/test-steps.mjs",
     "preview": "vite preview",
     "dev:ui": "vite"
   },

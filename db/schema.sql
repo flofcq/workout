@@ -72,10 +72,15 @@ create table if not exists salle.body_metrics (
   waist      numeric(5,1),
   arm        numeric(5,1),
   thigh      numeric(5,1),
+  steps      int,            -- pas du jour, envoyés par le raccourci iOS
   notes      text,
   created_at timestamptz not null default now(),
   unique (user_id, date)
 );
+
+-- La colonne `steps` est arrivée après coup : cette ligne la rajoute aux bases
+-- créées avant, et ne fait rien sur les autres.
+alter table salle.body_metrics add column if not exists steps int;
 
 -- ---------- Index ----------
 create index if not exists sets_user_exercise_idx  on salle.sets (user_id, exercise_key, performed_at);
