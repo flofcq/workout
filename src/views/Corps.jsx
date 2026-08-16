@@ -8,9 +8,16 @@ const FIELDS = [
   { key: 'waist', label: 'Taille', unit: 'cm', step: '0.5' },
   { key: 'arm', label: 'Bras', unit: 'cm', step: '0.5' },
   { key: 'thigh', label: 'Cuisse', unit: 'cm', step: '0.5' },
+  // Les pas arrivent du raccourci iOS (api/steps), jamais du formulaire :
+  // d'où manual: false, qui les exclut de la saisie et donc du PUT.
+  { key: 'steps', label: 'Pas', unit: 'pas', manual: false },
 ]
 
+const MANUAL_FIELDS = FIELDS.filter((f) => f.manual !== false)
+
 const todayISO = () => new Date().toISOString().slice(0, 10)
+
+const fmt = (v) => (v == null ? '—' : v.toLocaleString('fr-FR'))
 
 export default function Corps() {
   const [entries, setEntries] = useState([])
@@ -33,7 +40,7 @@ export default function Corps() {
     setSaving(true)
     setError(null)
     const payload = { date: form.date }
-    for (const f of FIELDS) {
+    for (const f of MANUAL_FIELDS) {
       const v = form[f.key]
       payload[f.key] = v === '' || v == null ? null : parseFloat(String(v).replace(',', '.'))
     }
@@ -78,6 +85,16 @@ export default function Corps() {
   // En sèche, une baisse de poids ou de tour de taille est la direction voulue.
   const lowerIsBetter = metric === 'weight' || metric === 'waist'
 
+  // Les pas varient trop d'un jour à l'autre pour qu'un écart premier/dernier
+  // veuille dire quoi que ce soit : c'est la moyenne récente qui informe.
+  const isSteps = metric === 'steps'
+  const avg7 = useMemo(() => {
+    if (!isSteps) return null
+    const recent = series.slice(-7)
+    if (!recent.length) return null
+    return Math.round(recent.reduce((n, p) => n + p.value, 0) / recent.length)
+  }, [series, isSteps])
+
   return (
     <>
       <h1>Corps</h1>
@@ -106,27 +123,49 @@ export default function Corps() {
         <>
           <div className="stats" style={{ marginBottom: 12 }}>
             <div className="stat">
-              <div className="v">{last != null ? `${last} ${field.unit}` : '—'}</div>
-              <div className="l">{field.label} — dernière mesure</div>
-              {delta != null && delta !== 0 && (
+              <div className="v">{last != null ? `${fmt(last)} ${field.unit}` : '—'}</div>
+              <div className="l">
+                {field.label} — {isSteps ? 'dernier jour' : 'dernière mesure'}
+              </div>
+              {!isSteps && delta != null && delta !== 0 && (
                 <div className={`d ${(delta < 0) === lowerIsBetter ? 'up' : 'down'}`}>
                   {delta > 0 ? '+' : ''}
                   {delta} {field.unit} depuis le début
                 </div>
               )}
             </div>
-            <div className="stat">
-              <div className="v">{entries.length}</div>
-              <div className="l">Mesures enregistrées</div>
-            </div>
+            {isSteps ? (
+              <div className="stat">
+                <div className="v">{avg7 != null ? `${fmt(avg7)} ${field.unit}` : '—'}</div>
+                <div className="l">Moyenne des 7 derniers jours enregistrés</div>
+              </div>
+            ) : (
+              <div className="stat">
+                <div className="v">{entries.length}</div>
+                <div className="l">Mesures enregistrées</div>
+              </div>
+            )}
           </div>
+
+          {isSteps && series.length === 0 && (
+            <div className="banner">
+              Aucun pas enregistré pour l'instant. Ils arrivent tout seuls de l'app Raccourcis
+              de ton iPhone — la configuration tient en quelques minutes, elle est décrite dans
+              le README.
+            </div>
+          )}
 
           <div className="card">
             <div className="charthead">
               <h3>{field.label}</h3>
               <span className="tiny">{field.unit}</span>
             </div>
-            <LineChartCard data={series} unit={field.unit} label={field.label} />
+            <LineChartCard
+              data={series}
+              unit={field.unit}
+              label={field.label}
+              format={isSteps ? fmt : undefined}
+            />
           </div>
         </>
       )}
@@ -144,7 +183,7 @@ export default function Corps() {
           />
         </div>
         <div className="row3">
-          {FIELDS.map((f) => (
+          {MANUAL_FIELDS.map((f) => (
             <div className="field" key={f.key}>
               <label htmlFor={f.key}>
                 {f.label} ({f.unit})

@@ -36,7 +36,7 @@ const sets = [
   })),
 ]
 
-const body = [24, 17, 10, 3].map((d, i) => ({
+const measures = [24, 17, 10, 3].map((d, i) => ({
   id: `b${i}`, date: daysAgo(d),
   weight: [84.2, 83.4, 82.9, 82.1][i],
   chest: [104, 104, 103.5, 103.5][i],
@@ -44,6 +44,20 @@ const body = [24, 17, 10, 3].map((d, i) => ({
   arm: [38.5, 38.5, 38, 38][i],
   thigh: [60, 59.5, 59.5, 59][i],
 }))
+
+// Les pas arrivent chaque jour du raccourci iOS, indépendamment des pesées :
+// certains jours n'ont donc que cette valeur-là.
+const steps = [11240, 7980, 9310, 13470, 6120, 8850, 10730, 9040, 12360, 7410, 9880, 8210]
+  .map((n, i) => ({ id: `s${i}`, date: daysAgo(12 - i), steps: n }))
+
+const body = [...measures, ...steps]
+  .reduce((acc, row) => {
+    const same = acc.find((x) => x.date === row.date)
+    if (same) Object.assign(same, row)
+    else acc.push({ ...row })
+    return acc
+  }, [])
+  .sort((a, b) => a.date.localeCompare(b.date))
 
 const ok = (value) => Promise.resolve(value)
 

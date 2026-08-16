@@ -6,7 +6,7 @@ Application web pour enregistrer tes séances et tes charges, avec le programme
 - **Séance** — les 5 séances du programme, saisie charge / reps / RPE, rappel de ta dernière performance sur chaque exercice, chrono de repos qui démarre tout seul quand tu valides une série.
 - **Historique** — toutes tes séances passées, dépliables.
 - **Progression** — courbes d'évolution par exercice (charge la plus lourde ou 1RM estimé).
-- **Corps** — poids et mensurations dans le temps.
+- **Corps** — poids, mensurations et nombre de pas dans le temps.
 - **Muscles** — fiche par muscle : où il est, ce qu'il fait, ses faisceaux, et les exercices du programme qui le travaillent.
 
 Fonctionne sur téléphone, synchronisé entre appareils.
@@ -164,6 +164,69 @@ Toutes les routes exigent une session valide, sauf `signup` et `login`.
 | `/api/sets` | `GET` `POST` | Filtre `?exercises=` ou `?workouts=` · enregistre une série |
 | `/api/sets/:id` | `PATCH` `DELETE` | Modifie · supprime une série |
 | `/api/body-metrics` | `GET` `PUT` | Liste · enregistre une mesure (une par jour) |
+| `/api/steps` | `POST` | Enregistre les pas du jour — jeton, pas de session (voir ci-dessous) |
+
+---
+
+## Récupérer tes pas depuis l'iPhone
+
+Apple Santé n'expose rien au web : aucun site, même ajouté à l'écran d'accueil,
+ne peut lire tes pas. On inverse donc le sens — c'est le téléphone qui les
+envoie, une fois par jour, via l'app **Raccourcis** (préinstallée).
+
+### Côté serveur
+
+Ajoute deux variables d'environnement, en local dans `.env` et sur Vercel dans
+**Settings → Environment Variables** :
+
+| Variable | Valeur |
+|---|---|
+| `STEPS_TOKEN` | un secret que tu génères : `openssl rand -base64 24` |
+| `STEPS_EMAIL` | l'email de ton compte, celui que les pas doivent alimenter |
+
+Puis redéploie. Tant que ces variables sont absentes, `/api/steps` refuse toute
+écriture (503) et le reste de l'app n'est pas affecté.
+
+Si ta base date d'avant cette fonctionnalité, rejoue [`db/schema.sql`](db/schema.sql)
+dans le SQL Editor de Neon : il ajoute la colonne `steps` sans toucher à tes
+données.
+
+### Côté iPhone
+
+Dans **Raccourcis → Automatisation → + → Heure du jour**, règle 23 h 50, tous les
+jours, et décoche « Demander avant d'exécuter ». Puis trois actions :
+
+1. **Rechercher les échantillons de santé** — Type : `Pas`, Période : `Aujourd'hui`,
+   Calculer : `Somme`
+2. **Format de date** (sur la Date du jour) — format personnalisé `yyyy-MM-dd`
+3. **Obtenir le contenu de l'URL** — `https://TON-SITE.vercel.app/api/steps`
+   - Méthode : `POST`
+   - En-têtes : `Authorization` = `Bearer TON_STEPS_TOKEN`
+   - Corps de la requête : `JSON`, avec deux champs :
+     - `steps` (nombre) → le résultat de l'étape 1
+     - `date` (texte) → le résultat de l'étape 2
+
+La date est facultative — sans elle, le serveur retient son jour courant en UTC,
+ce qui décale l'enregistrement si tu déclenches le raccourci tard le soir. Autant
+l'envoyer.
+
+Pour vérifier sans attendre 23 h 50, exécute le raccourci à la main : l'onglet
+**Corps → Pas** doit afficher la valeur du jour. En ligne de commande :
+
+```bash
+curl -X POST https://TON-SITE.vercel.app/api/steps \
+  -H "Authorization: Bearer TON_STEPS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"steps": 9411, "date": "2026-08-16"}'
+```
+
+Le jeton ne donne accès qu'à l'écriture des pas du compte `STEPS_EMAIL` : il ne
+permet ni de lire tes séances, ni de modifier ton poids ou tes mensurations. Les
+gardes de la route se testent sans base avec `npm run test:steps`.
+
+Les pas ne sont pas saisissables à la main dans l'app : ils n'apparaissent donc
+pas dans le formulaire « Nouvelle mesure », et enregistrer un poids ne les efface
+jamais — les deux routes écrivent des colonnes distinctes de la même ligne.
 
 ---
 
