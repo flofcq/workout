@@ -7,10 +7,11 @@ export const isDemo = import.meta.env.VITE_DEMO === '1'
 
 /** Erreur portant le code HTTP, pour que l'appelant puisse distinguer un 401. */
 export class ApiError extends Error {
-  constructor(message, status) {
+  constructor(message, status, code) {
     super(message)
     this.name = 'ApiError'
     this.status = status
+    this.code = code // SQLSTATE Postgres, quand l'API en renvoie un
   }
 }
 
@@ -42,7 +43,10 @@ async function request(path, { method = 'GET', body } = {}) {
     }
   }
 
-  if (!res.ok) throw new ApiError(data.error || `Erreur ${res.status}`, res.status)
+  if (!res.ok) {
+    const suffix = data.code ? ` (${data.code})` : ''
+    throw new ApiError((data.error || `Erreur ${res.status}`) + suffix, res.status, data.code)
+  }
   return data
 }
 
