@@ -7,6 +7,7 @@ Application web pour enregistrer tes séances et tes charges, avec le programme
 - **Historique** — toutes tes séances passées, dépliables.
 - **Progression** — courbes d'évolution par exercice (charge la plus lourde ou 1RM estimé).
 - **Corps** — poids et mensurations dans le temps.
+- **Muscles** — fiche par muscle : où il est, ce qu'il fait, ses faisceaux, et les exercices du programme qui le travaillent.
 
 Fonctionne sur téléphone, synchronisé entre appareils.
 
@@ -187,6 +188,31 @@ Pour ajouter un exercice, copie un bloc existant et donne-lui une clé inédite 
   star: true,                  // marque les exercices prioritaires
 }
 ```
+
+## Adapter les fiches muscles
+
+Les fiches de l'onglet **Muscles** sont dans [`src/muscles.js`](src/muscles.js), séparées
+du programme. Chaque fiche liste des clés d'exercices dans son champ `exercises` :
+c'est ce qui affiche « Dans ton programme » sous la fiche.
+
+```js
+{
+  key: 'grand_pectoral',
+  region: 'poitrine',          // une des clés de REGIONS, sert aux filtres
+  name: 'Grand pectoral',
+  aka: 'les « pecs »',         // facultatif
+  where: 'Où il se situe.',
+  action: 'Ce qu\'il fait bouger.',
+  parts: [                     // facultatif — faisceaux ou chefs, repliés par défaut
+    { name: 'Faisceau claviculaire (haut)', text: '…' },
+  ],
+  tip: 'La remarque pratique.',
+  exercises: ['dc_barre', 'dips'],   // clés de src/program.js
+}
+```
+
+Si tu retires un exercice du programme, sa clé est simplement ignorée ici : la fiche
+continue de s'afficher sans lui.
 
 ## Notes techniques
 

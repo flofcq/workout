@@ -4,6 +4,7 @@ import Seance from './views/Seance'
 import Historique from './views/Historique'
 import Progression from './views/Progression'
 import Corps from './views/Corps'
+import Muscles from './views/Muscles'
 import RestTimer from './components/RestTimer'
 
 const TABS = [
@@ -11,6 +12,7 @@ const TABS = [
   { key: 'historique', label: 'Historique', ico: '📋' },
   { key: 'progression', label: 'Progression', ico: '📈' },
   { key: 'corps', label: 'Corps', ico: '⚖️' },
+  { key: 'muscles', label: 'Muscles', ico: '💪' },
 ]
 
 export default function App() {
@@ -59,6 +61,7 @@ export default function App() {
         {tab === 'historique' && <Historique />}
         {tab === 'progression' && <Progression />}
         {tab === 'corps' && <Corps />}
+        {tab === 'muscles' && <Muscles />}
       </div>
 
       {timer && (

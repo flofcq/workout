@@ -91,6 +91,10 @@ input, select { font-family: inherit; font-size: inherit; }
 }
 .nav button.on { color: var(--accent); border-top-color: var(--accent); }
 .nav .ico { font-size: 17px; line-height: 1; }
+/* Cinq onglets : sur les écrans les plus étroits, « Progression » ne rentre plus. */
+@media (max-width: 370px) {
+  .nav button { font-size: 10.5px; padding-left: 2px; padding-right: 2px; }
+}
 
 /* ---------- Cards ---------- */
 
@@ -163,6 +167,39 @@ p:last-child { margin-bottom: 0; }
   background: var(--card-2); border-radius: 7px; padding: 7px 10px;
 }
 .exo-last b { color: var(--ink); font-variant-numeric: tabular-nums; }
+
+/* ---------- Muscles ---------- */
+
+.mus-def { margin: 10px 0 0; font-size: 13.5px; }
+.mus-def dt {
+  font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--muted); font-weight: 700; margin-bottom: 2px;
+}
+.mus-def dd { margin: 0 0 9px; line-height: 1.45; }
+.mus-def dd:last-child { margin-bottom: 0; }
+
+.mus-parts { margin-top: 6px; display: flex; flex-direction: column; gap: 8px; }
+.mus-part {
+  background: var(--card-2); border-radius: 7px; padding: 8px 10px;
+  font-size: 12.5px; line-height: 1.45; color: var(--muted);
+}
+.mus-part b { display: block; color: var(--ink); font-weight: 650; }
+
+.mus-exos-title {
+  font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--muted); font-weight: 700; margin-top: 12px;
+}
+.mus-exos { list-style: none; margin: 6px 0 0; padding: 0; font-size: 13.5px; }
+.mus-exos li {
+  display: flex; align-items: baseline; gap: 8px;
+  padding: 5px 0; border-bottom: 1px solid var(--line); line-height: 1.35;
+}
+.mus-exos li:last-child { border-bottom: 0; padding-bottom: 0; }
+.mus-exos .k {
+  flex: none; font-size: 10.5px; font-weight: 700; letter-spacing: 0.04em;
+  color: var(--accent); background: var(--accent-soft);
+  border-radius: 5px; padding: 2px 6px;
+}
 
 /* ---------- Set rows ---------- */
 
