@@ -3,11 +3,21 @@
 --  À coller dans le SQL Editor de ton projet Neon, puis "Run".
 --  Rejouable sans risque : tout est en "if not exists".
 --
+--  Pourquoi un bloc DO ?
+--  Le SQL Editor de Neon envoie le contenu de l'onglet comme une requête
+--  préparée, et Postgres refuse alors plusieurs commandes séparées par ';'
+--  (« cannot insert multiple commands into a prepared statement »). Emballer
+--  le tout dans un bloc DO n'envoie qu'une seule commande, et lève la
+--  limitation. psql exécute ce fichier tel quel, sans changement.
+--
 --  Note : pas de Row Level Security ici, contrairement à la version
 --  Supabase. Le navigateur ne parle jamais à la base directement — il
 --  passe par les fonctions serverless de `api/`, qui filtrent toutes
 --  sur l'utilisateur de la session. C'est là qu'est l'isolation.
 -- ============================================================
+
+DO $$
+BEGIN
 
 -- ---------- Utilisateurs ----------
 -- L'email est stocké en minuscules (normalisé côté API) pour que
@@ -65,3 +75,5 @@ create index if not exists sets_user_exercise_idx  on public.sets (user_id, exer
 create index if not exists sets_workout_idx        on public.sets (workout_id);
 create index if not exists workouts_user_date_idx  on public.workouts (user_id, date desc);
 create index if not exists body_user_date_idx      on public.body_metrics (user_id, date);
+
+END $$;

@@ -53,7 +53,15 @@ d'investir 10 minutes dans la configuration.
 2. Ouvre le **SQL Editor** de ton projet Neon.
 3. Copie tout le contenu de [`db/schema.sql`](db/schema.sql), colle-le, exécute.
 
-Ça crée quatre tables : `users`, `workouts`, `sets`, `body_metrics`.
+Ça crée quatre tables : `users`, `workouts`, `sets`, `body_metrics`. Le fichier
+est rejouable autant de fois que tu veux : tout est en `if not exists`, rien
+n'est supprimé.
+
+> Le schéma est enveloppé dans un bloc `DO $$ … $$`. Ce n'est pas cosmétique :
+> le SQL Editor de Neon envoie l'onglet comme une requête préparée, et Postgres
+> rejette alors plusieurs commandes séparées par `;` — « cannot insert multiple
+> commands into a prepared statement ». Le bloc n'en envoie qu'une seule. Ça ne
+> change rien pour `psql`, qui exécute le fichier tel quel.
 
 ---
 
