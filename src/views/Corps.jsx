@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { api } from '../api'
+import { todayISO } from '../date'
 import LineChartCard from '../components/LineChartCard'
 
 const FIELDS = [
@@ -9,8 +10,6 @@ const FIELDS = [
   { key: 'arm', label: 'Bras', unit: 'cm', step: '0.5' },
   { key: 'thigh', label: 'Cuisse', unit: 'cm', step: '0.5' },
 ]
-
-const todayISO = () => new Date().toISOString().slice(0, 10)
 
 export default function Corps() {
   const [entries, setEntries] = useState([])

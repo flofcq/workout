@@ -1,22 +1,43 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { api } from '../api'
 import { PROGRAM, getDay } from '../program'
+import { parseDate, shiftDate, todayISO } from '../date'
 
-const todayISO = () => new Date().toISOString().slice(0, 10)
+// Le programme est ancré sur les jours de la semaine. On s'en sert pour
+// pré-sélectionner la séance, sans jamais l'imposer : jeudi et dimanche n'ont
+// rien de prévu, et une séance peut toujours être décalée d'un jour.
+const WEEKDAY_TO_DAY = { 1: 'j1', 2: 'j2', 3: 'j3', 5: 'j4', 6: 'j5' }
 
-// Le jour de la semaine suggère la séance, mais tu peux toujours en choisir une autre.
-function suggestedDay() {
-  const map = { 1: 'j1', 2: 'j2', 3: 'j3', 5: 'j4', 6: 'j5' }
-  return map[new Date().getDay()] || 'j1'
+function suggestedDayFor(iso) {
+  return WEEKDAY_TO_DAY[parseDate(iso).getDay()] || null
+}
+
+const weekdayOf = (iso) => parseDate(iso).toLocaleDateString('fr-FR', { weekday: 'long' })
+
+function formatLong(iso) {
+  return parseDate(iso).toLocaleDateString('fr-FR', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+  })
 }
 
 export default function Seance({ onStartRest }) {
-  const [dayKey, setDayKey] = useState(suggestedDay)
+  const [date, setDate] = useState(todayISO)
+  // Choix manuel de séance, mémorisé avec la date à laquelle il s'applique.
+  // Changer de date l'invalide donc tout seul, et la suggestion du jour
+  // reprend la main — sans effet de bord ni chargement en double.
+  const [override, setOverride] = useState(null) // { date, dayKey }
   const [workout, setWorkout] = useState(null)
   const [rows, setRows] = useState({}) // exKey -> [{ weight, reps, rpe, id }]
   const [last, setLast] = useState({}) // exKey -> { date, sets: [] }
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+
+  const dayKey =
+    (override?.date === date ? override.dayKey : null) ||
+    suggestedDayFor(date) ||
+    PROGRAM[0].key
 
   const day = useMemo(() => getDay(dayKey), [dayKey])
 
@@ -31,14 +52,14 @@ export default function Seance({ onStartRest }) {
         api.sets.byExercises(keys),
       ])
 
-      const todaysWorkout =
-        allWorkouts.find((w) => w.day_key === dayKey && w.date === todayISO()) || null
-      setWorkout(todaysWorkout)
+      const openWorkout =
+        allWorkouts.find((w) => w.day_key === dayKey && w.date === date) || null
+      setWorkout(openWorkout)
 
-      // Séries déjà saisies aujourd'hui pour cette séance
+      // Séries déjà saisies pour la séance affichée
       const current = {}
-      if (todaysWorkout) {
-        for (const s of all.filter((x) => x.workout_id === todaysWorkout.id)) {
+      if (openWorkout) {
+        for (const s of all.filter((x) => x.workout_id === openWorkout.id)) {
           ;(current[s.exercise_key] ||= [])[s.set_index] = {
             id: s.id,
             weight: String(s.weight ?? ''),
@@ -48,10 +69,14 @@ export default function Seance({ onStartRest }) {
         }
       }
 
-      // Dernière performance : la séance la plus récente qui n'est pas celle d'aujourd'hui
+      // Dernière performance : la séance la plus récente *avant* la date affichée.
+      // Comparer aux dates et pas au workout_id est indispensable depuis qu'on
+      // peut remonter dans le passé — sinon, en saisissant une séance d'il y a
+      // deux semaines, on verrait comme « dernière fois » une séance postérieure.
+      // `all` est trié par performed_at décroissant : le premier trouvé est le bon.
       const prev = {}
       for (const s of all) {
-        if (todaysWorkout && s.workout_id === todaysWorkout.id) continue
+        if (s.performed_at >= date) continue
         const e = (prev[s.exercise_key] ||= { workoutId: s.workout_id, date: s.performed_at, sets: [] })
         if (e.workoutId === s.workout_id) e.sets.push(s)
       }
@@ -63,15 +88,20 @@ export default function Seance({ onStartRest }) {
     } finally {
       setLoading(false)
     }
-  }, [day, dayKey])
+  }, [day, dayKey, date])
 
   useEffect(() => {
     load()
   }, [load])
 
+  // Forme fonctionnelle obligatoire : sans elle, tapoter la flèche plusieurs
+  // fois de suite ne recule que d'un jour, chaque clic repartant de la date
+  // figée dans son rendu.
+  const shiftBy = (days) => setDate((current) => shiftDate(current, days))
+
   async function ensureWorkout() {
     if (workout) return workout
-    const created = await api.workouts.create(dayKey, todayISO())
+    const created = await api.workouts.create(dayKey, date)
     setWorkout(created)
     return created
   }
@@ -99,7 +129,7 @@ export default function Seance({ onStartRest }) {
         weight,
         reps,
         rpe: row.rpe ? parseFloat(String(row.rpe).replace(',', '.')) : null,
-        performed_at: todayISO(),
+        performed_at: date,
       }
 
       if (row.id) {
@@ -130,21 +160,61 @@ export default function Seance({ onStartRest }) {
 
   return (
     <>
-      <h1>{day.title}</h1>
-      <p className="sub" style={{ marginBottom: 14 }}>
-        {day.day} · {day.focus} · {doneCount}/{totalSets} séries validées
+      <div className="datenav">
+        <button className="btn sm" onClick={() => shiftBy(-1)} aria-label="Jour précédent">
+          ◀
+        </button>
+        <input
+          type="date"
+          value={date}
+          max={todayISO()}
+          aria-label="Date de la séance"
+          onChange={(e) => e.target.value && setDate(e.target.value)}
+        />
+        <button
+          className="btn sm"
+          onClick={() => shiftBy(1)}
+          disabled={date >= todayISO()}
+          aria-label="Jour suivant"
+        >
+          ▶
+        </button>
+      </div>
+
+      <p className="sub datenav-day">
+        <span className="datenav-date">{formatLong(date)}</span>
+        {date !== todayISO() && (
+          <button className="btn ghost sm" onClick={() => setDate(todayISO())}>
+            Revenir à aujourd'hui
+          </button>
+        )}
       </p>
 
-      <div className="chips" style={{ marginBottom: 16 }}>
-        {PROGRAM.map((d) => (
-          <button
-            key={d.key}
-            className={`chip${d.key === dayKey ? ' on' : ''}`}
-            onClick={() => setDayKey(d.key)}
-          >
-            {d.key.toUpperCase()}
-          </button>
-        ))}
+      <h1>{day.title}</h1>
+      <p className="sub" style={{ marginBottom: 14 }}>
+        {day.focus} · {doneCount}/{totalSets} séries validées
+      </p>
+
+      <div className="field">
+        <label htmlFor="seance">Séance</label>
+        <select
+          id="seance"
+          value={dayKey}
+          onChange={(e) => setOverride({ date, dayKey: e.target.value })}
+        >
+          {PROGRAM.map((d) => (
+            <option key={d.key} value={d.key}>
+              {d.title}
+            </option>
+          ))}
+        </select>
+        <p className="tiny" style={{ marginTop: 6 }}>
+          {suggestedDayFor(date) === dayKey
+            ? `C'est la séance prévue ${weekdayOf(date)}.`
+            : suggestedDayFor(date)
+              ? `Séance décalée : ${getDay(suggestedDayFor(date)).title} était prévue ce jour-là.`
+              : `Aucune séance n'est prévue ${weekdayOf(date)} — choisis celle que tu as faite.`}
+        </p>
       </div>
 
       {error && <div className="banner">Erreur : {error}</div>}

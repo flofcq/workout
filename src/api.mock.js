@@ -2,9 +2,10 @@
 // de données. Activé par VITE_DEMO=1. Aucune donnée n'est persistée : les
 // écritures renvoient une réponse plausible et sont oubliées au rechargement.
 
+import { toISODate } from './date'
+
 const today = new Date()
-const iso = (d) => d.toISOString().slice(0, 10)
-const daysAgo = (n) => iso(new Date(today.getTime() - n * 86400000))
+const daysAgo = (n) => toISODate(new Date(today.getTime() - n * 86400000))
 
 const workouts = [
   { id: 'w1', day_key: 'j1', date: daysAgo(21) },

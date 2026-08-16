@@ -280,6 +280,26 @@ p:last-child { margin-bottom: 0; }
 .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .row3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
 
+/* ---------- Navigation par date ---------- */
+
+.datenav { display: flex; align-items: center; gap: 8px; margin: 4px 0 8px; }
+.datenav input[type="date"] {
+  flex: 1; min-width: 0; text-align: center;
+  border: 1px solid var(--line); background: var(--card-2); color: var(--ink);
+  border-radius: var(--radius-sm); padding: 10px 12px;
+  font-variant-numeric: tabular-nums;
+}
+.datenav input[type="date"]:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+.datenav .btn { padding: 10px 13px; line-height: 1; }
+.datenav-day {
+  display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+/* En français seule l'initiale prend une majuscule : « dimanche 16 août ».
+   text-transform: capitalize en mettrait une à chaque mot. */
+.datenav-date::first-letter { text-transform: uppercase; }
+.datenav-day .btn { padding: 0; }
+
 /* ---------- Stats ---------- */
 
 .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; }

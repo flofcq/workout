@@ -3,7 +3,7 @@
 Application web pour enregistrer tes séances et tes charges, avec le programme
 « Priorité pectoraux » pré-chargé.
 
-- **Séance** — les 5 séances du programme, saisie charge / reps / RPE, rappel de ta dernière performance sur chaque exercice, chrono de repos qui démarre tout seul quand tu valides une série.
+- **Séance** — saisie charge / reps / RPE jour par jour : tu navigues par date (flèches ou calendrier) et choisis la séance par son nom, ce qui permet de rattraper celle d'hier. Rappel de ta dernière performance sur chaque exercice, chrono de repos qui démarre tout seul quand tu valides une série.
 - **Historique** — toutes tes séances passées, dépliables.
 - **Progression** — courbes d'évolution par exercice (charge la plus lourde ou 1RM estimé).
 - **Corps** — poids et mensurations dans le temps.

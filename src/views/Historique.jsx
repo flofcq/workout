@@ -80,7 +80,7 @@ export default function Historique() {
                     {formatLong(w.date)} · {sets.length} séries · {Math.round(tonnage)} kg de tonnage
                   </div>
                 </div>
-                <span className="tag grey">{w.day_key.toUpperCase()}</span>
+                {day?.focus && <span className="tag grey">{day.focus}</span>}
               </div>
             </button>
 
