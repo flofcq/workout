@@ -114,17 +114,37 @@ une fois ton compte créé.
 
 Il n'y a pas de procédure de réinitialisation par email, et les mots de passe ne
 sont pas récupérables : la base ne contient que des hashs bcrypt, qui sont à sens
-unique. Utilise le script prévu pour ça :
+unique. Trois façons de s'en sortir, de la plus simple à la plus prudente.
+
+**Si le compte est vide** — supprime-le depuis le SQL Editor de Neon, puis refais
+« Créer un compte » sur le site :
+
+```sql
+delete from users where email = 'toi@exemple.com';
+```
+
+⚠️ À ne pas faire si tu as des séances : `workouts.user_id` est en
+`on delete cascade`, tout l'historique partirait avec.
+
+**Si tu as des séances** — réécris seulement le hash, toujours depuis le SQL
+Editor. Postgres sait générer un hash bcrypt, que l'app vérifie sans souci :
+
+```sql
+create extension if not exists pgcrypto;
+update users set password_hash = crypt('nouveau-mot-de-passe', gen_salt('bf', 10))
+where email = 'toi@exemple.com';
+```
+
+**Si tu préfères que le mot de passe ne transite pas par l'éditeur SQL** (où il
+peut rester dans l'historique des requêtes), le même résultat depuis ta machine :
 
 ```bash
 vercel env pull .env                                        # récupère DATABASE_URL
 node --env-file=.env scripts/set-password.mjs toi@exemple.com nouveau-mot-de-passe
 ```
 
-Il écrase le hash sans toucher au reste : **tes séances sont conservées**, puisque
-c'est le `user_id` qui les relie au compte et qu'il ne change pas. Ne supprime pas
-la ligne dans `users` pour recréer le compte — la clé étrangère est en
-`on delete cascade`, tout ton historique partirait avec.
+Les deux dernières méthodes conservent tes séances : c'est le `user_id` qui les
+relie au compte, et il ne change pas.
 
 ---
 
