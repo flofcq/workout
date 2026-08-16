@@ -229,6 +229,13 @@ continue de s'afficher sans lui.
 - **Graphiques** : une seule série par graphique, jamais deux axes Y. La couleur
   de série (`--series-1`) est validée pour le contraste et la lisibilité en vision
   des couleurs déficiente, en mode clair comme en mode sombre.
+- **Mise à jour automatique** : une app ajoutée à l'écran d'accueil iOS ne se recharge
+  pas toute seule — Safari restaure la page telle quelle, parfois pendant des jours.
+  [`src/useAppUpdate.js`](src/useAppUpdate.js) compare le bundle qui tourne à celui
+  qu'annonce le `index.html` déployé (Vite renomme le fichier à chaque build). Au
+  démarrage, ou au retour au premier plan après plus de 30 minutes, la page se
+  recharge sans rien demander. Pendant une séance, elle propose seulement — un
+  rechargement effacerait les charges tapées mais pas encore validées.
 - **Thème sombre** automatique selon le réglage du système.
 - **1RM estimé** : formule d'Epley, ignorée au-delà de 12 répétitions où
   l'estimation devient trop imprécise.

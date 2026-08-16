@@ -6,6 +6,7 @@ import Progression from './views/Progression'
 import Corps from './views/Corps'
 import Muscles from './views/Muscles'
 import RestTimer from './components/RestTimer'
+import useAppUpdate from './useAppUpdate'
 
 const TABS = [
   { key: 'seance', label: 'Séance', ico: '🏋️' },
@@ -21,6 +22,7 @@ export default function App() {
   const [serverDown, setServerDown] = useState(false)
   const [tab, setTab] = useState('seance')
   const [timer, setTimer] = useState(null) // { seconds, label, id }
+  const update = useAppUpdate()
 
   useEffect(() => {
     api.auth
@@ -64,13 +66,22 @@ export default function App() {
         {tab === 'muscles' && <Muscles />}
       </div>
 
-      {timer && (
+      {/* Les deux occupent la même place au-dessus de la navigation ; le repos
+          est prioritaire, la mise à jour peut attendre la fin de la série. */}
+      {timer ? (
         <RestTimer
           key={timer.id}
           seconds={timer.seconds}
           label={timer.label}
           onDismiss={() => setTimer(null)}
         />
+      ) : (
+        update.available && (
+          <div className="updatebar">
+            <span>Nouvelle version disponible</span>
+            <button onClick={update.reload}>Recharger</button>
+          </div>
+        )
       )}
 
       <nav className="nav">

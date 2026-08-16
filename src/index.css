@@ -245,6 +245,24 @@ p:last-child { margin-bottom: 0; }
   border-radius: 99px; padding: 7px 13px; font-size: 13px; font-weight: 600;
 }
 
+/* ---------- Update bar ---------- */
+
+.updatebar {
+  position: fixed; left: 50%; transform: translateX(-50%);
+  bottom: calc(64px + env(safe-area-inset-bottom)); z-index: 45;
+  background: var(--accent); color: var(--accent-ink);
+  border-radius: 99px; padding: 9px 10px 9px 18px;
+  display: flex; align-items: center; gap: 12px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.22);
+  width: calc(100% - 28px); max-width: 400px;
+  font-size: 13.5px; font-weight: 600;
+}
+.updatebar span { flex: 1; line-height: 1.25; }
+.updatebar button {
+  border: 0; background: rgba(255, 255, 255, 0.22); color: inherit;
+  border-radius: 99px; padding: 7px 13px; font-size: 13px; font-weight: 700;
+}
+
 /* ---------- Forms ---------- */
 
 .field { margin-bottom: 11px; }
