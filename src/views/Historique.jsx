@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { api } from '../api'
 import { getDay, getExercise } from '../program'
 import ExerciseLink from '../components/ExerciseLink'
+import { fmtDuration } from '../format'
 
 export default function Historique() {
   const [workouts, setWorkouts] = useState([])
@@ -65,6 +66,8 @@ export default function Historique() {
         const warmups = sets.length - working.length
         const tonnage = working.reduce((n, s) => n + (s.weight || 0) * (s.reps || 0), 0)
         const open = openId === w.id
+        const duration =
+          w.started_at && w.ended_at ? new Date(w.ended_at) - new Date(w.started_at) : null
 
         const byEx = {}
         for (const s of working) (byEx[s.exercise_key] ||= []).push(s)
@@ -84,6 +87,7 @@ export default function Historique() {
                   <div className="tiny" style={{ marginTop: 2 }}>
                     {formatLong(w.date)} · {working.length} séries · {Math.round(tonnage)} kg de
                     tonnage
+                    {duration != null && ` · ${fmtDuration(duration)}`}
                   </div>
                 </div>
                 <span className="tag grey">{w.day_key.toUpperCase()}</span>

@@ -3,8 +3,8 @@
 Application web pour enregistrer tes séances et tes charges, avec le programme
 « Priorité pectoraux » pré-chargé.
 
-- **Séance** — les 5 séances du programme, échauffement en tête et montées en charge calculées, saisie charge / reps / RPE, rappel de ta dernière performance sur chaque exercice, chrono de repos qui démarre tout seul quand tu valides une série.
-- **Historique** — toutes tes séances passées, dépliables.
+- **Séance** — les 5 séances du programme, échauffement en tête et montées en charge calculées, saisie charge / reps / RPE, temps de repos affiché et chrono qui démarre tout seul quand tu valides une série. Bouton pour démarrer et terminer la séance, avec bilan à la fin.
+- **Historique** — toutes tes séances passées, dépliables, avec leur durée.
 - **Progression** — courbes d'évolution par exercice (charge la plus lourde ou 1RM estimé).
 - **Corps** — poids, mensurations et nombre de pas dans le temps.
 - **Muscles** — fiche par muscle : où il est, ce qu'il fait, ses faisceaux, et les exercices du programme qui le travaillent.
@@ -57,7 +57,8 @@ d'investir 10 minutes dans la configuration.
 
 ⚠️ **Si ta base existe déjà**, rejoue ce fichier après chaque mise à jour de l'app :
 il est entièrement rejouable (`if not exists`) et se charge des colonnes ajoutées
-depuis — `sets.warmup` et `body_metrics.steps` aujourd'hui. Sans ça, l'API
+depuis — `sets.warmup`, `body_metrics.steps`, `workouts.started_at` et
+`workouts.ended_at` aujourd'hui. Sans ça, l'API
 échouera à enregistrer une série : elle s'appuie sur une contrainte d'unicité
 que la migration met en place.
 
@@ -166,7 +167,7 @@ Toutes les routes exigent une session valide, sauf `signup` et `login`.
 | `/api/auth/logout` | `POST` | Ferme la session |
 | `/api/auth/me` | `GET` | Utilisateur courant, ou `null` |
 | `/api/workouts` | `GET` `POST` | Liste (60 dernières) · crée la séance du jour |
-| `/api/workouts/:id` | `DELETE` | Supprime une séance et ses séries |
+| `/api/workouts/:id` | `PATCH` `DELETE` | Début et fin de séance · supprime une séance et ses séries |
 | `/api/sets` | `GET` `POST` | Filtre `?exercises=` ou `?workouts=` · enregistre une série (champ `warmup`) |
 | `/api/sets/:id` | `PATCH` `DELETE` | Modifie · supprime une série |
 | `/api/body-metrics` | `GET` `PUT` | Liste · enregistre une mesure (une par jour) |
@@ -236,6 +237,34 @@ jamais — les deux routes écrivent des colonnes distinctes de la même ligne.
 
 ---
 
+## Début, fin et bilan de séance
+
+Un bouton **Démarrer la séance** en tête de l'onglet Séance lance le chronomètre,
+qui tourne ensuite en continu. **Terminer** l'arrête et affiche le bilan ;
+**Reprendre** rouvre la séance si tu as appuyé trop tôt.
+
+Si tu oublies d'appuyer sur Démarrer, ce n'est pas grave : l'heure de début est
+posée à la création de la séance, donc au moment où tu valides ta première série.
+Le bouton ne sert qu'à démarrer plus tôt, à l'échauffement.
+
+Les deux horodatages viennent **du serveur**, jamais du navigateur : une horloge
+de téléphone déréglée donnerait des durées fantaisistes. Ils sont les seules
+données ajoutées en base — tout le bilan est recalculé à l'affichage :
+
+| Dans le bilan | Calcul |
+|---|---|
+| Durée totale, temps par série | `ended_at − started_at` |
+| Exercices abordés, séries validées | séries de travail du jour, l'échauffement compté à part |
+| Tonnage | somme des charge × reps, échauffement exclu |
+| Écart vs dernière fois | tonnage comparé à la dernière séance du même type |
+| RPE moyen | moyenne des RPE saisis |
+| Records | charge du jour supérieure à ton meilleur historique sur l'exercice |
+
+Un record n'est annoncé que s'il y a un passé sur l'exercice : une première
+séance ne bat rien.
+
+---
+
 ## L'échauffement
 
 Il a deux niveaux, tous les deux définis dans [`src/program.js`](src/program.js).
@@ -254,6 +283,10 @@ une consigne par ligne. C'est du rappel, rien n'est enregistré.
   exercises: [ … ],
 }
 ```
+
+Le temps de repos de chaque exercice (`rest`, en secondes) est affiché à côté des
+séries et des RPE, et sert aussi à démarrer le chrono automatiquement. Entre deux
+montées en charge, 30 à 60 s suffisent — c'est indiqué dans le bloc.
 
 **Les montées en charge**, sous chaque exercice lourd : le champ `ramp` indique
 combien de séries d'approche, et l'app calcule les charges depuis ta série de

@@ -25,10 +25,16 @@ create table if not exists public.workouts (
   user_id    uuid not null references public.users(id) on delete cascade,
   day_key    text not null,                 -- 'j1' … 'j5'
   date       date not null default current_date,
+  started_at timestamptz,                   -- bouton « Démarrer »
+  ended_at   timestamptz,                   -- bouton « Terminer »
   notes      text,
   created_at timestamptz not null default now(),
   unique (user_id, day_key, date)
 );
+
+-- Arrivées après coup : durée des séances.
+alter table public.workouts add column if not exists started_at timestamptz;
+alter table public.workouts add column if not exists ended_at   timestamptz;
 
 -- ---------- Séries ----------
 -- `warmup` distingue les montées en charge des séries de travail. Les deux

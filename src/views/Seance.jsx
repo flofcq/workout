@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { api } from '../api'
 import { PROGRAM, getDay, rampSets } from '../program'
 import ExerciseLink from '../components/ExerciseLink'
+import { fmtDuration, fmtRest } from '../format'
 
 const todayISO = () => new Date().toISOString().slice(0, 10)
 
@@ -21,6 +22,8 @@ export default function Seance({ onStartRest }) {
   const [workout, setWorkout] = useState(null)
   const [rows, setRows] = useState({}) // slot -> [{ weight, reps, rpe, id }]
   const [last, setLast] = useState({}) // exKey -> { date, sets: [] }
+  const [best, setBest] = useState({}) // exKey -> charge la plus lourde avant aujourd'hui
+  const [pending, setPending] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
@@ -69,8 +72,18 @@ export default function Seance({ onStartRest }) {
         if (e.workoutId === s.workout_id) e.sets.push(s)
       }
 
+      // Meilleure charge historique par exercice, hors aujourd'hui : c'est la
+      // référence qui permet d'annoncer un record dans le bilan.
+      const tops = {}
+      for (const s2 of all) {
+        if (s2.warmup) continue
+        if (todaysWorkout && s2.workout_id === todaysWorkout.id) continue
+        if (!(tops[s2.exercise_key] >= s2.weight)) tops[s2.exercise_key] = s2.weight
+      }
+
       setRows(current)
       setLast(prev)
+      setBest(tops)
     } catch (e) {
       setError(e.message)
     } finally {
@@ -87,6 +100,41 @@ export default function Seance({ onStartRest }) {
     const created = await api.workouts.create(dayKey, todayISO())
     setWorkout(created)
     return created
+  }
+
+  // Démarrer / terminer / reprendre. L'horodatage est toujours celui du
+  // serveur : voir api/workouts/[id].js.
+  async function stamp(patch) {
+    setPending(true)
+    setError(null)
+    try {
+      const w = await ensureWorkout()
+      const updated = await api.workouts.update(w.id, patch)
+      setWorkout((cur) => ({ ...cur, ...updated }))
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setPending(false)
+    }
+  }
+
+  async function startSession() {
+    // Créer la séance suffit : la route pose started_at à l'insertion. Le PATCH
+    // ne sert qu'aux séances déjà créées sans heure de début.
+    if (!workout) {
+      setPending(true)
+      try {
+        const created = await api.workouts.create(dayKey, todayISO())
+        setWorkout(created)
+        if (created.started_at) return
+      } catch (e) {
+        setError(e.message)
+        return
+      } finally {
+        setPending(false)
+      }
+    }
+    await stamp({ started_at: 'now', ended_at: null })
   }
 
   function setField(slotKey, idx, field, value) {
@@ -180,7 +228,20 @@ export default function Seance({ onStartRest }) {
         ))}
       </div>
 
+      <BarreSeance
+        workout={workout}
+        pending={pending}
+        onStart={startSession}
+        onFinish={() => stamp({ ended_at: 'now' })}
+        onReopen={() => stamp({ ended_at: null })}
+      />
+
       {error && <div className="banner">Erreur : {error}</div>}
+
+      {workout?.ended_at && (
+        <Bilan day={day} workout={workout} rows={rows} last={last} best={best} />
+      )}
+
       {day.note && <div className="banner">{day.note}</div>}
 
       {day.warmup?.length > 0 && <Echauffement items={day.warmup} />}
@@ -255,6 +316,8 @@ function Exercice({ ex, rows, warmRows, last, onField, onValidate, onUnvalidate 
           {ex.sets} × {ex.reps}
           <br />
           RPE {ex.rpe}
+          <br />
+          repos {fmtRest(ex.rest)}
         </div>
       </div>
 
@@ -280,7 +343,10 @@ function Exercice({ ex, rows, warmRows, last, onField, onValidate, onUnvalidate 
         <>
           <div className="warm-title">
             Échauffement{' '}
-            <span>{working ? 'montées en charge' : 'aucun historique, à toi de juger'}</span>
+            <span>
+              {working ? 'montées en charge' : 'aucun historique, à toi de juger'} · 30 à 60 s de
+              repos
+            </span>
           </div>
           <div className="sets">
             {ramp.map((r, i) => (
@@ -385,6 +451,192 @@ function SetRow({
       >
         ✓
       </button>
+    </div>
+  )
+}
+
+/** Bouton global de début et de fin de séance, avec le temps écoulé. */
+function BarreSeance({ workout, pending, onStart, onFinish, onReopen }) {
+  const started = workout?.started_at
+  const ended = workout?.ended_at
+
+  if (!started) {
+    return (
+      <button
+        className="btn primary block"
+        style={{ marginBottom: 12 }}
+        onClick={onStart}
+        disabled={pending}
+      >
+        ▶ Démarrer la séance
+      </button>
+    )
+  }
+
+  if (ended) {
+    return (
+      <div className="sessionbar over">
+        <div>
+          <div className="t">{fmtDuration(new Date(ended) - new Date(started))}</div>
+          <div className="l">Séance terminée</div>
+        </div>
+        <button className="btn sm" onClick={onReopen} disabled={pending}>
+          Reprendre
+        </button>
+      </div>
+    )
+  }
+
+  return (
+    <div className="sessionbar">
+      <div>
+        <div className="t">
+          <Elapsed from={started} />
+        </div>
+        <div className="l">Séance en cours</div>
+      </div>
+      <button className="btn sm" onClick={onFinish} disabled={pending}>
+        Terminer
+      </button>
+    </div>
+  )
+}
+
+/** Isolé dans son composant pour que la seconde qui tourne ne réaffiche que lui. */
+function Elapsed({ from }) {
+  const [now, setNow] = useState(() => Date.now())
+
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(id)
+  }, [])
+
+  return fmtDuration(now - new Date(from).getTime())
+}
+
+/**
+ * Bilan de fin de séance. Tout est recalculé depuis les séries validées du
+ * jour : la base ne stocke rien de plus que les deux horodatages.
+ */
+function Bilan({ day, workout, rows, last, best }) {
+  const stats = useMemo(() => {
+    let sets = 0
+    let warmSets = 0
+    let tonnage = 0
+    let rpeSum = 0
+    let rpeCount = 0
+    let exercises = 0
+    const records = []
+
+    for (const ex of day.exercises) {
+      const done = (rows[ex.key] || []).filter((r) => r?.id)
+      warmSets += (rows[`${ex.key}:w`] || []).filter((r) => r?.id).length
+      if (!done.length) continue
+
+      exercises += 1
+      let top = 0
+      for (const r of done) {
+        const kg = parseFloat(String(r.weight).replace(',', '.')) || 0
+        const reps = parseInt(r.reps, 10) || 0
+        sets += 1
+        tonnage += kg * reps
+        if (kg > top) top = kg
+        const rpe = parseFloat(String(r.rpe).replace(',', '.'))
+        if (!Number.isNaN(rpe)) {
+          rpeSum += rpe
+          rpeCount += 1
+        }
+      }
+
+      // Un record se compare à un historique : sans passé sur l'exercice, il
+      // n'y a rien à annoncer.
+      if (best[ex.key] != null && top > best[ex.key]) {
+        records.push({ key: ex.key, name: ex.name, top, previous: best[ex.key] })
+      }
+    }
+
+    // Tonnage de la fois précédente, exercice par exercice, échauffements exclus.
+    const prevTonnage = Object.values(last).reduce(
+      (n, e) => n + e.sets.reduce((m, s) => m + (s.weight || 0) * (s.reps || 0), 0),
+      0
+    )
+
+    const ms =
+      workout.started_at && workout.ended_at
+        ? new Date(workout.ended_at) - new Date(workout.started_at)
+        : null
+
+    return {
+      sets,
+      warmSets,
+      exercises,
+      records,
+      tonnage: Math.round(tonnage),
+      prevTonnage: Math.round(prevTonnage),
+      plannedSets: day.exercises.reduce((n, e) => n + e.sets, 0),
+      rpe: rpeCount ? Math.round((rpeSum / rpeCount) * 10) / 10 : null,
+      ms,
+      perSet: ms && sets ? ms / sets : null,
+    }
+  }, [day, rows, last, best, workout])
+
+  const deltaTonnage =
+    stats.prevTonnage > 0 && stats.tonnage > 0
+      ? Math.round(((stats.tonnage - stats.prevTonnage) / stats.prevTonnage) * 100)
+      : null
+
+  return (
+    <div className="card">
+      <h3>Bilan de la séance</h3>
+      <p className="tiny" style={{ marginBottom: 12 }}>
+        {stats.exercises}/{day.exercises.length} exercices abordés,{' '}
+        {stats.sets}/{stats.plannedSets} séries de travail validées
+        {stats.warmSets > 0 && ` (+ ${stats.warmSets} d'échauffement)`}.
+      </p>
+
+      <div className="stats">
+        {stats.ms != null && (
+          <div className="stat">
+            <div className="v">{fmtDuration(stats.ms)}</div>
+            <div className="l">Durée totale</div>
+            {stats.perSet != null && (
+              <div className="d">{fmtDuration(stats.perSet)} par série</div>
+            )}
+          </div>
+        )}
+        <div className="stat">
+          <div className="v">{stats.tonnage.toLocaleString('fr-FR')} kg</div>
+          <div className="l">Tonnage</div>
+          {deltaTonnage != null && deltaTonnage !== 0 && (
+            <div className={`d ${deltaTonnage > 0 ? 'up' : 'down'}`}>
+              {deltaTonnage > 0 ? '+' : ''}
+              {deltaTonnage} % vs dernière fois
+            </div>
+          )}
+        </div>
+        {stats.rpe != null && (
+          <div className="stat">
+            <div className="v">{stats.rpe}</div>
+            <div className="l">RPE moyen</div>
+          </div>
+        )}
+      </div>
+
+      {stats.records.length > 0 && (
+        <div className="records">
+          {stats.records.map((r) => (
+            <div key={r.key}>
+              <b>Record</b> {r.name} — {r.top} kg <span>(avant {r.previous} kg)</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {stats.sets === 0 && (
+        <p className="tiny" style={{ marginTop: 10 }}>
+          Aucune série de travail validée : le bilan restera vide tant que rien n'est enregistré.
+        </p>
+      )}
     </div>
   )
 }

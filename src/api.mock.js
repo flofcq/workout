@@ -6,11 +6,17 @@ const today = new Date()
 const iso = (d) => d.toISOString().slice(0, 10)
 const daysAgo = (n) => iso(new Date(today.getTime() - n * 86400000))
 
+// Séances passées, avec leur durée : 18 h 30 → 19 h 35 environ.
+const withDuration = (date, minutes) => ({
+  started_at: `${date}T18:30:00.000Z`,
+  ended_at: `${date}T${String(18 + Math.floor((30 + minutes) / 60)).padStart(2, '0')}:${String((30 + minutes) % 60).padStart(2, '0')}:00.000Z`,
+})
+
 const workouts = [
-  { id: 'w1', day_key: 'j1', date: daysAgo(21) },
-  { id: 'w2', day_key: 'j1', date: daysAgo(14) },
-  { id: 'w3', day_key: 'j1', date: daysAgo(7) },
-  { id: 'w4', day_key: 'j4', date: daysAgo(4) },
+  { id: 'w1', day_key: 'j1', date: daysAgo(21), ...withDuration(daysAgo(21), 71) },
+  { id: 'w2', day_key: 'j1', date: daysAgo(14), ...withDuration(daysAgo(14), 66) },
+  { id: 'w3', day_key: 'j1', date: daysAgo(7), ...withDuration(daysAgo(7), 63) },
+  { id: 'w4', day_key: 'j4', date: daysAgo(4), ...withDuration(daysAgo(4), 58) },
 ]
 
 const sets = [
@@ -67,6 +73,9 @@ const body = [...measures, ...steps]
 
 const ok = (value) => Promise.resolve(value)
 
+// Séances démarrées pendant la session de démo, oubliées au rechargement.
+const started = {}
+
 // Même tri que la vraie route /api/sets, dont la vue Séance dépend pour
 // retrouver la dernière performance.
 const sorted = (list) =>
@@ -83,8 +92,32 @@ export const mockApi = {
   },
 
   workouts: {
-    list: () => ok([...workouts].sort((a, b) => b.date.localeCompare(a.date))),
-    create: (dayKey, date) => ok({ id: `tmp-${dayKey}-${date}`, day_key: dayKey, date }),
+    list: () =>
+      ok([...Object.values(started), ...workouts].sort((a, b) => b.date.localeCompare(a.date))),
+    // Même sémantique que la vraie route : créer deux fois la séance du jour
+    // renvoie la même, avec son heure de début inchangée.
+    create: (dayKey, date) => {
+      const k = `${dayKey}:${date}`
+      started[k] ||= {
+        id: `tmp-${k}`,
+        day_key: dayKey,
+        date,
+        started_at: new Date().toISOString(),
+        ended_at: null,
+      }
+      return ok({ ...started[k] })
+    },
+    // Renvoie la séance entière, comme le PATCH : un champ absent du corps
+    // reste tel quel, il n'est pas effacé.
+    update: (id, payload) => {
+      const w = Object.values(started).find((x) => x.id === id)
+      if (!w) return ok({ id, ...payload })
+      for (const field of ['started_at', 'ended_at']) {
+        if (payload[field] === undefined) continue
+        w[field] = payload[field] === 'now' ? new Date().toISOString() : payload[field]
+      }
+      return ok({ ...w })
+    },
     remove: () => ok({ ok: true }),
   },
 
