@@ -55,6 +55,21 @@ d'investir 10 minutes dans la configuration.
 
 Ça crée quatre tables : `users`, `workouts`, `sets`, `body_metrics`.
 
+### « cannot insert multiple commands into a prepared statement »
+
+Si l'éditeur SQL renvoie cette erreur, c'est qu'il envoie le script comme une
+requête préparée unique, ce qui interdit d'y mettre plusieurs commandes. Deux
+solutions :
+
+- **Emballer le fichier dans un bloc** : insère `do $mig$ begin` juste après
+  l'en-tête et `end $mig$;` à la fin. L'ensemble devient une commande unique, et
+  s'exécute dans une seule transaction. Le contenu ne change pas d'une ligne.
+- **Passer par `psql`**, qui n'a pas cette limite :
+  ```bash
+  vercel env pull .env
+  psql "$(grep '^DATABASE_URL=' .env | cut -d= -f2- | tr -d '\"')" -f db/schema.sql
+  ```
+
 ⚠️ **Si ta base existe déjà**, rejoue ce fichier après chaque mise à jour de l'app :
 il est entièrement rejouable (`if not exists`) et se charge des colonnes ajoutées
 depuis — `sets.warmup`, `body_metrics.steps`, `workouts.started_at` et
