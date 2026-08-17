@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { api } from '../api'
 import { PROGRAM, getDay } from '../program'
+import ExerciseLink from '../components/ExerciseLink'
 
 const todayISO = () => new Date().toISOString().slice(0, 10)
 
@@ -179,7 +180,7 @@ function Exercice({ ex, rows, last, onField, onValidate, onUnvalidate }) {
       <div className="exo-head">
         <div style={{ minWidth: 0 }}>
           <div className="exo-name">
-            {ex.name} {ex.star && <span className="star">★</span>}
+            <ExerciseLink ex={ex} /> {ex.star && <span className="star">★</span>}
           </div>
           <div className="exo-mus">{ex.muscles}</div>
         </div>

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api'
 import { getDay, getExercise } from '../program'
+import ExerciseLink from '../components/ExerciseLink'
 
 export default function Historique() {
   const [workouts, setWorkouts] = useState([])
@@ -97,7 +98,7 @@ export default function Historique() {
                     {Object.entries(byEx).map(([k, list]) => (
                       <tr key={k}>
                         <td style={{ fontVariantNumeric: 'normal' }}>
-                          {getExercise(k)?.name || k}
+                          {getExercise(k) ? <ExerciseLink ex={getExercise(k)} /> : k}
                         </td>
                         <td>
                           {list

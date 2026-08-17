@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { api } from '../api'
 import { EXERCISES, estimate1RM, getExercise } from '../program'
 import LineChartCard from '../components/LineChartCard'
+import ExerciseLink from '../components/ExerciseLink'
 
 const STARRED = EXERCISES.filter((e) => e.star)
 
@@ -142,7 +143,8 @@ export default function Progression() {
           <div className="card">
             <div className="charthead">
               <h3>
-                {ex?.name} — {mode === 'top' ? 'charge la plus lourde' : '1RM estimé'}
+                <ExerciseLink ex={ex} /> —{' '}
+                {mode === 'top' ? 'charge la plus lourde' : '1RM estimé'}
               </h3>
               <button className="btn ghost sm" onClick={() => setShowTable((v) => !v)}>
                 {showTable ? 'Graphique' : 'Tableau'}

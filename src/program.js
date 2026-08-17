@@ -308,6 +308,20 @@ export function getExercise(key) {
   return EXERCISES.find((e) => e.key === key)
 }
 
+/**
+ * Lien vers une démonstration vidéo de l'exercice.
+ *
+ * Par défaut, une recherche YouTube sur le nom de l'exercice : ça ne peut pas
+ * devenir un lien mort, et ça marche aussi pour les exercices que tu ajouteras
+ * sans rien configurer. Pour épingler une vidéo précise, renseigne le champ
+ * `video` de l'exercice avec son URL.
+ */
+export function videoUrl(ex) {
+  if (ex?.video) return ex.video
+  const query = encodeURIComponent(`${ex?.name ?? ''} technique musculation`)
+  return `https://www.youtube.com/results?search_query=${query}`
+}
+
 // Estimation de 1RM (formule d'Epley). Peu fiable au-delà de 12 reps,
 // on la borne pour éviter des valeurs absurdes sur les séries longues.
 export function estimate1RM(weight, reps) {

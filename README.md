@@ -249,8 +249,22 @@ Pour ajouter un exercice, copie un bloc existant et donne-lui une clé inédite 
   muscles: 'Primaire · secondaires',
   cue: 'La consigne technique.',
   star: true,                  // marque les exercices prioritaires
+  video: 'https://youtu.be/…', // facultatif, voir ci-dessous
 }
 ```
+
+### Les vidéos de démonstration
+
+Le nom de chaque exercice est cliquable, dans toutes les vues où il apparaît :
+ça ouvre une démonstration dans un **nouvel onglet**, jamais dans l'app —
+en plein écran sur iOS, quitter la page ferait perdre les séries tapées et pas
+encore validées.
+
+Par défaut le lien est une recherche YouTube sur le nom de l'exercice. C'est
+volontaire : un lien de recherche ne peut pas devenir un lien mort, et il marche
+d'emblée pour les exercices que tu ajoutes. Quand tu tombes sur une vidéo qui
+t'explique bien un mouvement, épingle-la en renseignant le champ `video` de
+l'exercice — le lien pointera dessus au lieu de la recherche.
 
 ## Adapter les fiches muscles
 

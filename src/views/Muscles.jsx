@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { MUSCLES, REGIONS, musclesByRegion } from '../muscles'
 import { getExercise } from '../program'
+import ExerciseLink from '../components/ExerciseLink'
 
 export default function Muscles() {
   const [region, setRegion] = useState('tous')
@@ -101,7 +102,7 @@ function MuscleCard({ muscle }) {
             {exercises.map((e) => (
               <li key={e.key}>
                 <span className="k">{e.dayKey.toUpperCase()}</span>
-                {e.name}
+                <ExerciseLink ex={e} />
               </li>
             ))}
           </ul>
