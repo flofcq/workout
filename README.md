@@ -3,8 +3,8 @@
 Application web pour enregistrer tes séances et tes charges, avec le programme
 « Priorité pectoraux » pré-chargé.
 
-- **Séance** — saisie charge / reps / RPE jour par jour : tu navigues par date (flèches ou calendrier) et choisis la séance par son nom, ce qui permet de rattraper celle d'hier. Machine occupée ? **Ajoute un exercice** à la volée, pris ailleurs dans le programme ou saisi librement. Rappel de ta dernière performance sur chaque exercice, chrono de repos qui démarre tout seul quand tu valides une série.
-- **Historique** — toutes tes séances passées, dépliables.
+- **Séance** — saisie charge / reps / RPE jour par jour : tu navigues par date (flèches ou calendrier) et choisis la séance par son nom, ce qui permet de rattraper celle d'hier. Échauffement en tête et montées en charge calculées, bouton pour démarrer et terminer la séance avec bilan à la fin. Machine occupée ? **Ajoute un exercice** à la volée, pris ailleurs dans le programme ou saisi librement. Rappel de ta dernière performance, temps de repos affiché et chrono qui démarre tout seul quand tu valides une série.
+- **Historique** — toutes tes séances passées, dépliables, avec leur durée.
 - **Progression** — courbes d'évolution par exercice (charge la plus lourde ou 1RM estimé).
 - **Corps** — poids, mensurations et nombre de pas dans le temps.
 - **Muscles** — fiche par muscle : où il est, ce qu'il fait, ses faisceaux, et les exercices du programme qui le travaillent. Les muscles cités sous chaque exercice de la séance sont **cliquables** et mènent droit à leur fiche.
@@ -70,6 +70,28 @@ autant de fois que tu veux : tout est en `if not exists`, rien n'est supprimé.
 > plusieurs commandes séparées par `;` — « cannot insert multiple commands into
 > a prepared statement ». Le bloc n'en envoie qu'une seule. Ça ne change rien
 > pour `psql`, qui exécute le fichier tel quel.
+
+### « cannot insert multiple commands into a prepared statement »
+
+Si l'éditeur SQL renvoie cette erreur, c'est qu'il envoie le script comme une
+requête préparée unique, ce qui interdit d'y mettre plusieurs commandes. Deux
+solutions :
+
+- **Emballer le fichier dans un bloc** : insère `do $mig$ begin` juste après
+  l'en-tête et `end $mig$;` à la fin. L'ensemble devient une commande unique, et
+  s'exécute dans une seule transaction. Le contenu ne change pas d'une ligne.
+- **Passer par `psql`**, qui n'a pas cette limite :
+  ```bash
+  vercel env pull .env
+  psql "$(grep '^DATABASE_URL=' .env | cut -d= -f2- | tr -d '\"')" -f db/schema.sql
+  ```
+
+⚠️ **Si ta base existe déjà**, rejoue ce fichier après chaque mise à jour de l'app :
+il est entièrement rejouable (`if not exists`) et se charge des colonnes ajoutées
+depuis — `sets.warmup`, `body_metrics.steps`, `workouts.started_at` et
+`workouts.ended_at` aujourd'hui. Sans ça, l'API
+échouera à enregistrer une série : elle s'appuie sur une contrainte d'unicité
+que la migration met en place.
 
 ---
 
@@ -176,8 +198,8 @@ Toutes les routes exigent une session valide, sauf `signup` et `login`.
 | `/api/auth/logout` | `POST` | Ferme la session |
 | `/api/auth/me` | `GET` | Utilisateur courant, ou `null` |
 | `/api/workouts` | `GET` `POST` | Liste (60 dernières) · crée la séance du jour |
-| `/api/workouts/:id` | `DELETE` | Supprime une séance et ses séries |
-| `/api/sets` | `GET` `POST` | Filtre `?exercises=` ou `?workouts=` · enregistre une série |
+| `/api/workouts/:id` | `PATCH` `DELETE` | Début et fin de séance · supprime une séance et ses séries |
+| `/api/sets` | `GET` `POST` | Filtre `?exercises=` ou `?workouts=` · enregistre une série (champ `warmup`) |
 | `/api/sets/:id` | `PATCH` `DELETE` | Modifie · supprime une série |
 | `/api/body-metrics` | `GET` `PUT` | Liste · enregistre une mesure (une par jour) |
 | `/api/exercises` | `GET` | Les exercices hors programme déjà utilisés par le compte |
@@ -264,6 +286,83 @@ Progression, sous « Hors programme ».
 Ces ajouts ne modifient jamais [`src/program.js`](src/program.js) : ils ne
 valent que pour la séance où tu les fais. Si l'un d'eux devient une habitude,
 c'est le signe qu'il mérite d'entrer dans le programme — voir ci-dessous.
+---
+## Début, fin et bilan de séance
+
+Un bouton **Démarrer la séance** en tête de l'onglet Séance lance le chronomètre,
+qui tourne ensuite en continu. **Terminer** l'arrête et affiche le bilan ;
+**Reprendre** rouvre la séance si tu as appuyé trop tôt.
+
+Si tu oublies d'appuyer sur Démarrer, ce n'est pas grave : l'heure de début est
+posée à la création de la séance, donc au moment où tu valides ta première série.
+Le bouton ne sert qu'à démarrer plus tôt, à l'échauffement.
+
+Les deux horodatages viennent **du serveur**, jamais du navigateur : une horloge
+de téléphone déréglée donnerait des durées fantaisistes. Ils sont les seules
+données ajoutées en base — tout le bilan est recalculé à l'affichage :
+
+| Dans le bilan | Calcul |
+|---|---|
+| Durée totale, temps par série | `ended_at − started_at` |
+| Exercices abordés, séries validées | séries de travail du jour, l'échauffement compté à part |
+| Tonnage | somme des charge × reps, échauffement exclu |
+| Écart vs dernière fois | tonnage comparé à la dernière séance du même type |
+| RPE moyen | moyenne des RPE saisis |
+| Records | charge du jour supérieure à ton meilleur historique sur l'exercice |
+
+Un record n'est annoncé que s'il y a un passé sur l'exercice : une première
+séance ne bat rien.
+
+---
+
+## L'échauffement
+
+Il a deux niveaux, tous les deux définis dans [`src/program.js`](src/program.js).
+
+**Le bloc général**, en tête de séance : un tableau `warmup` sur la journée, avec
+une consigne par ligne. C'est du rappel, rien n'est enregistré.
+
+```js
+{
+  key: 'j1',
+  day: 'Lundi',
+  warmup: [
+    '5 min de vélo ou de rameur…',
+    "Rotations externes à l'élastique : 2 × 15…",
+  ],
+  exercises: [ … ],
+}
+```
+
+Le temps de repos de chaque exercice (`rest`, en secondes) est affiché à côté des
+séries et des RPE, et sert aussi à démarrer le chrono automatiquement. Entre deux
+montées en charge, 30 à 60 s suffisent — c'est indiqué dans le bloc.
+
+**Les montées en charge**, sous chaque exercice lourd : le champ `ramp` indique
+combien de séries d'approche, et l'app calcule les charges depuis ta série de
+travail de la dernière séance.
+
+| `ramp` | Séries proposées |
+|---|---|
+| `1` | 60 % × 6 |
+| `2` | 55 % × 8, 75 % × 4 |
+| `3` | 50 % × 8, 70 % × 5, 85 % × 3 |
+
+Les charges sont arrondies au multiple de 2,5 kg le plus proche. Sans historique
+sur l'exercice, l'app affiche les pourcentages et te laisse juger.
+
+Le champ `added: true` marque les exercices lestés (tractions, dips), où la charge
+saisie est le lest et pas le poids soulevé : un pourcentage du lest n'aurait aucun
+sens, la première approche s'y fait donc au poids du corps.
+
+Ces séries **se valident et sont enregistrées** comme les autres, avec
+`warmup = true` en base. Valider une montée en charge sans rien taper enregistre
+la valeur suggérée — un geste par série. Deux différences avec une série de
+travail : le chrono de repos ne démarre pas (on enchaîne), et elles sont exclues
+partout où elles fausseraient la lecture — courbes de progression, tonnage,
+compteur de séries de la séance, et rappel « dernière fois ».
+
+---
 
 ## Adapter le programme
 
@@ -284,8 +383,24 @@ Pour ajouter un exercice, copie un bloc existant et donne-lui une clé inédite 
   muscles: 'Primaire · secondaires',
   cue: 'La consigne technique.',
   star: true,                  // marque les exercices prioritaires
+  ramp: 3,                     // facultatif : séries d'échauffement calculées
+  added: true,                 // facultatif : exercice lesté (tractions, dips)
+  video: 'https://youtu.be/…', // facultatif, voir ci-dessous
 }
 ```
+
+### Les vidéos de démonstration
+
+Le nom de chaque exercice est cliquable, dans toutes les vues où il apparaît :
+ça ouvre une démonstration dans un **nouvel onglet**, jamais dans l'app —
+en plein écran sur iOS, quitter la page ferait perdre les séries tapées et pas
+encore validées.
+
+Par défaut le lien est une recherche YouTube sur le nom de l'exercice. C'est
+volontaire : un lien de recherche ne peut pas devenir un lien mort, et il marche
+d'emblée pour les exercices que tu ajoutes. Quand tu tombes sur une vidéo qui
+t'explique bien un mouvement, épingle-la en renseignant le champ `video` de
+l'exercice — le lien pointera dessus au lieu de la recherche.
 
 ## Adapter les fiches muscles
 

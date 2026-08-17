@@ -9,13 +9,19 @@ export const PROGRAM = [
     title: 'Pecs lourd · Épaules · Triceps',
     focus: 'Force',
     priority: true,
-    note: "Séance la plus lourde de la semaine. Échauffe-toi sérieusement : 3-4 montées en charge sur le premier exercice.",
+    note: "Séance la plus lourde de la semaine. L'échauffement n'est pas optionnel ici.",
+    warmup: [
+      "5 min de vélo ou de rameur, jusqu'à avoir chaud et le souffle un peu court.",
+      "Rotations externes à l'élastique : 2 × 15, très léger. Ça réveille la coiffe avant de charger l'épaule.",
+      "Dislocations à l'élastique ou au bâton : 15 lentes, amplitude complète.",
+    ],
     exercises: [
       {
         key: 'dc_barre',
         name: 'Développé couché barre',
         star: true,
         sets: 4, reps: '5-6', rpe: '8', rest: 180,
+        ramp: 3,
         muscles: 'Grand pectoral (faisceau moyen) · deltoïde antérieur, triceps',
         cue: "Omoplates serrées et abaissées toute la série. Coudes à 45-60° du buste. Descente contrôlée 2 s, pas de rebond.",
       },
@@ -24,6 +30,7 @@ export const PROGRAM = [
         name: 'Développé incliné haltères 30°',
         star: true,
         sets: 3, reps: '8-10', rpe: '8', rest: 150,
+        ramp: 2,
         muscles: 'Grand pectoral (faisceau claviculaire) · deltoïde antérieur, triceps',
         cue: "30° est le bon angle : au-delà de 45° le deltoïde prend le relais. Ne colle pas les haltères en haut.",
       },
@@ -31,6 +38,7 @@ export const PROGRAM = [
         key: 'dev_militaire',
         name: 'Développé militaire debout',
         sets: 3, reps: '6-8', rpe: '8', rest: 120,
+        ramp: 2,
         muscles: 'Deltoïde antérieur · deltoïde moyen, triceps, trapèze supérieur',
         cue: "Gainage serré, fessiers contractés. La cambrure lombaire transforme le mouvement en développé incliné.",
       },
@@ -63,11 +71,18 @@ export const PROGRAM = [
     title: 'Dos · Biceps · Abdos',
     focus: 'Volume',
     note: "Équilibre le volume de poussée. Un dos fort stabilise aussi tes développés.",
+    warmup: [
+      '5 min de cardio léger.',
+      "Suspension à la barre : 2 × 20 s. Ça décomprime la colonne et étire le dorsal.",
+      "Face pull à l'élastique : 2 × 15, léger — les rhomboïdes avant les tirages lourds.",
+    ],
     exercises: [
       {
         key: 'tractions',
         name: 'Tractions lestées pronation',
         sets: 4, reps: '6-8', rpe: '8', rest: 180,
+        added: true,
+        ramp: 2,
         muscles: 'Grand dorsal · grand rond, biceps, trapèze inférieur',
         cue: "Tire avec les coudes vers le sol, pas le menton vers la barre. Bras tendus en bas.",
       },
@@ -75,6 +90,7 @@ export const PROGRAM = [
         key: 'rowing_barre',
         name: 'Rowing barre buste penché',
         sets: 4, reps: '8-10', rpe: '8', rest: 150,
+        ramp: 2,
         muscles: 'Grand dorsal, trapèze moyen, rhomboïdes · deltoïde post., biceps',
         cue: "Vers le nombril = dorsal, vers le sternum = trapèzes. Dos neutre, aucun à-coup lombaire.",
       },
@@ -128,11 +144,18 @@ export const PROGRAM = [
     title: 'Jambes',
     focus: 'Complet',
     note: "Une seule grosse séance jambes dans ce bloc : elle doit être sérieuse.",
+    warmup: [
+      '5 à 8 min de vélo : les jambes demandent plus long que le haut du corps.',
+      '10 squats au poids du corps, lents, un peu plus bas à chaque répétition.',
+      "Mobilité de cheville : 10 par jambe, genou vers l'avant. Une cheville raide te vole de la profondeur au squat.",
+      'Balancements de jambe, 10 par côté, avant et sur le côté.',
+    ],
     exercises: [
       {
         key: 'squat',
         name: 'Squat barre',
         sets: 4, reps: '5-6', rpe: '8', rest: 180,
+        ramp: 3,
         muscles: 'Quadriceps, grand fessier · adducteurs, ischio-jambiers',
         cue: "Garde une profondeur identique d'une séance à l'autre, sinon tu ne peux plus comparer tes charges.",
       },
@@ -140,6 +163,7 @@ export const PROGRAM = [
         key: 'sdt_roumain',
         name: 'Soulevé de terre roumain',
         sets: 3, reps: '8-10', rpe: '8', rest: 150,
+        ramp: 2,
         muscles: 'Ischio-jambiers, grand fessier · érecteurs, dorsaux',
         cue: "Le mouvement vient des hanches qui partent en arrière. Remonte dès que le dos veut s'arrondir.",
       },
@@ -147,6 +171,7 @@ export const PROGRAM = [
         key: 'presse',
         name: 'Presse à cuisses',
         sets: 3, reps: '10-12', rpe: '9', rest: 120,
+        ramp: 2,
         muscles: 'Quadriceps · grand fessier, adducteurs',
         cue: "Pieds bas = quadriceps, pieds hauts = fessiers/ischios. Ne décolle jamais le bassin du dossier.",
       },
@@ -180,12 +205,18 @@ export const PROGRAM = [
     focus: 'Hypertrophie',
     priority: true,
     note: "Deuxième exposition, angles complémentaires. L'amplitude et la tension priment sur le poids affiché.",
+    warmup: [
+      '5 min de cardio léger.',
+      "Rotations externes à l'élastique : 2 × 15.",
+      "Écarté à l'élastique : 15 reps sans charge, pour sentir le pectoral avant de pousser.",
+    ],
     exercises: [
       {
         key: 'di_barre',
         name: 'Développé incliné barre 30-45°',
         star: true,
         sets: 4, reps: '6-8', rpe: '8', rest: 180,
+        ramp: 3,
         muscles: 'Grand pectoral (faisceau claviculaire) · deltoïde antérieur, triceps',
         cue: "La barre descend sous les clavicules, pas au sternum. Placé en premier car c'est le faisceau prioritaire.",
       },
@@ -194,6 +225,8 @@ export const PROGRAM = [
         name: 'Dips lestés, buste penché en avant',
         star: true,
         sets: 3, reps: '8-12', rpe: '9', rest: 120,
+        added: true,
+        ramp: 2,
         muscles: 'Grand pectoral (faisceaux bas et moyen) · triceps, deltoïde antérieur',
         cue: "Buste vertical = triceps. Buste penché 30° + coudes ouverts = pectoraux. C'est la position qui décide.",
       },
@@ -234,11 +267,17 @@ export const PROGRAM = [
     title: 'Dos · Ischios · Bras · Abdos · Finisher pecs',
     focus: 'Rappel',
     note: "Séance moins lourde, plus de sensations. Le finisher pecs est la 3e exposition de la semaine.",
+    warmup: [
+      '5 min de cardio léger.',
+      'Suspension à la barre : 2 × 20 s.',
+      'Balancements de jambe tendue, 10 par côté : les ischios avant le leg curl.',
+    ],
     exercises: [
       {
         key: 'tirage_vertical',
         name: 'Tirage vertical prise large',
         sets: 3, reps: '10-12', rpe: '9', rest: 120,
+        ramp: 1,
         muscles: 'Grand dorsal · grand rond, rhomboïdes, biceps',
         cue: "Barre vers le haut de la poitrine, jamais derrière la nuque.",
       },
@@ -347,6 +386,52 @@ export function customExercise(key, name) {
     cue: "Exercice ajouté en séance, faute de machine disponible. Note la charge et les répétitions comme d'habitude : la progression se suivra sur ce nom.",
     custom: true,
   }
+}
+
+/**
+ * Lien vers une démonstration vidéo de l'exercice.
+ *
+ * Par défaut, une recherche YouTube sur le nom de l'exercice : ça ne peut pas
+ * devenir un lien mort, et ça marche aussi pour les exercices que tu ajouteras
+ * sans rien configurer. Pour épingler une vidéo précise, renseigne le champ
+ * `video` de l'exercice avec son URL.
+ */
+export function videoUrl(ex) {
+  if (ex?.video) return ex.video
+  const query = encodeURIComponent(`${ex?.name ?? ''} technique musculation`)
+  return `https://www.youtube.com/results?search_query=${query}`
+}
+
+// Montées en charge : pourcentage de la série de travail, et répétitions.
+// Moins de séries d'approche = démarrage plus haut, pour arriver chaud sans
+// accumuler de fatigue inutile.
+const RAMP_SCHEMES = {
+  1: [[0.6, 6]],
+  2: [[0.55, 8], [0.75, 4]],
+  3: [[0.5, 8], [0.7, 5], [0.85, 3]],
+}
+
+const toStep = (kg, step = 2.5) => Math.max(step, Math.round(kg / step) * step)
+
+/**
+ * Séries d'échauffement suggérées pour un exercice, calculées depuis la charge
+ * de travail de la dernière séance.
+ *
+ * `working` peut être nul (aucun historique) : on renvoie alors les
+ * pourcentages seuls, à charge de l'interface de les afficher en indication.
+ */
+export function rampSets(ex, working) {
+  const scheme = RAMP_SCHEMES[ex?.ramp]
+  if (!scheme) return []
+
+  return scheme.map(([pct, reps], i) => ({
+    pct: Math.round(pct * 100),
+    reps,
+    // Sur un exercice lesté, la charge saisie est le lest et pas le poids
+    // soulevé : un pourcentage du lest ne veut rien dire, la première approche
+    // se fait donc au poids du corps (0 kg de lest).
+    weight: working == null ? null : ex.added && i === 0 ? 0 : toStep(working * pct),
+  }))
 }
 
 // Estimation de 1RM (formule d'Epley). Peu fiable au-delà de 12 reps,

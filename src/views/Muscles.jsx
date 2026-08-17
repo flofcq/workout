@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { MUSCLES, REGIONS, musclesByRegion } from '../muscles'
 import { getExercise } from '../program'
+import ExerciseLink from '../components/ExerciseLink'
 
 const cardId = (key) => `mus-${key}`
 
@@ -135,7 +136,7 @@ function MuscleCard({ muscle, highlighted }) {
                 {/* Le jour de la semaine, pas « J1 » : depuis que la saisie est
                     calendaire, les libellés J1…J5 n'apparaissent plus nulle part. */}
                 <span className="k">{e.dayName.slice(0, 3)}</span>
-                {e.name}
+                <ExerciseLink ex={e} />
               </li>
             ))}
           </ul>

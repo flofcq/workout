@@ -7,14 +7,22 @@ import {
   customKey,
   getDay,
   getExercise,
+  rampSets,
 } from '../program'
 import { splitMuscleText } from '../muscles'
 import { parseDate, shiftDate, todayISO } from '../date'
+import { fmtDuration, fmtRest } from '../format'
+import ExerciseLink from '../components/ExerciseLink'
 
 // Le programme est ancré sur les jours de la semaine. On s'en sert pour
 // pré-sélectionner la séance, sans jamais l'imposer : jeudi et dimanche n'ont
 // rien de prévu, et une séance peut toujours être décalée d'un jour.
 const WEEKDAY_TO_DAY = { 1: 'j1', 2: 'j2', 3: 'j3', 5: 'j4', 6: 'j5' }
+
+// Les séries d'échauffement et de travail d'un même exercice se numérotent
+// toutes les deux à partir de 0 : elles occupent donc deux emplacements
+// distincts dans l'état, comme elles occupent deux clés distinctes en base.
+const slot = (exKey, warmup) => (warmup ? `${exKey}:w` : exKey)
 
 function suggestedDayFor(iso) {
   return WEEKDAY_TO_DAY[parseDate(iso).getDay()] || null
@@ -37,12 +45,14 @@ export default function Seance({ onStartRest, onOpenMuscle }) {
   // reprend la main — sans effet de bord ni chargement en double.
   const [override, setOverride] = useState(null) // { date, dayKey }
   const [workout, setWorkout] = useState(null)
-  const [rows, setRows] = useState({}) // exKey -> [{ weight, reps, rpe, id }]
+  const [rows, setRows] = useState({}) // slot -> [{ weight, reps, rpe, id }]
   const [last, setLast] = useState({}) // exKey -> { date, sets: [] }
   // Exercices ajoutés en cours de séance, absents du plan du jour.
   const [extras, setExtras] = useState([])
   // Exercices hors programme déjà utilisés par le compte, pour les reproposer.
   const [knownCustom, setKnownCustom] = useState([])
+  const [best, setBest] = useState({}) // exKey -> charge la plus lourde avant aujourd'hui
+  const [pending, setPending] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
@@ -98,7 +108,7 @@ export default function Seance({ onStartRest, onOpenMuscle }) {
       // Séries déjà saisies pour la séance affichée
       const current = {}
       for (const s of sessionSets) {
-        ;(current[s.exercise_key] ||= [])[s.set_index] = {
+        ;(current[slot(s.exercise_key, s.warmup)] ||= [])[s.set_index] = {
           id: s.id,
           weight: String(s.weight ?? ''),
           reps: String(s.reps ?? ''),
@@ -106,20 +116,35 @@ export default function Seance({ onStartRest, onOpenMuscle }) {
         }
       }
 
-      // Dernière performance : la séance la plus récente *avant* la date affichée.
-      // Comparer aux dates et pas au workout_id est indispensable depuis qu'on
-      // peut remonter dans le passé — sinon, en saisissant une séance d'il y a
-      // deux semaines, on verrait comme « dernière fois » une séance postérieure.
+      // Dernière performance : la séance la plus récente *avant* la date
+      // affichée. Comparer aux dates et pas au workout_id est indispensable
+      // depuis qu'on peut remonter dans le passé — sinon, en saisissant une
+      // séance d'il y a deux semaines, on verrait comme « dernière fois » une
+      // séance postérieure. Les échauffements sont exclus : ce ne sont pas des
+      // performances, et ils fausseraient les montées en charge calculées.
       // `all` est trié par performed_at décroissant : le premier trouvé est le bon.
       const prev = {}
       for (const s of all) {
+        if (s.warmup) continue
         if (s.performed_at >= date) continue
         const e = (prev[s.exercise_key] ||= { workoutId: s.workout_id, date: s.performed_at, sets: [] })
         if (e.workoutId === s.workout_id) e.sets.push(s)
       }
 
+      // Meilleure charge par exercice avant la date affichée : la référence qui
+      // permet d'annoncer un record dans le bilan. Même filtre par date que
+      // `prev`, sinon ouvrir une séance ancienne la comparerait à des séances
+      // postérieures et n'annoncerait jamais de record.
+      const tops = {}
+      for (const s2 of all) {
+        if (s2.warmup) continue
+        if (s2.performed_at >= date) continue
+        if (!(tops[s2.exercise_key] >= s2.weight)) tops[s2.exercise_key] = s2.weight
+      }
+
       setRows(current)
       setLast(prev)
+      setBest(tops)
     } catch (e) {
       setError(e.message)
     } finally {
@@ -162,19 +187,63 @@ export default function Seance({ onStartRest, onOpenMuscle }) {
     return created
   }
 
-  function setField(exKey, idx, field, value) {
+  // Démarrer / terminer / reprendre. L'horodatage est toujours celui du
+  // serveur : voir api/workouts/[id].js.
+  async function stamp(patch) {
+    setPending(true)
+    setError(null)
+    try {
+      const w = await ensureWorkout()
+      const updated = await api.workouts.update(w.id, patch)
+      setWorkout((cur) => ({ ...cur, ...updated }))
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setPending(false)
+    }
+  }
+
+  async function startSession() {
+    // Créer la séance suffit : la route pose started_at à l'insertion. Le PATCH
+    // ne sert qu'aux séances déjà créées sans heure de début.
+    if (!workout) {
+      setPending(true)
+      try {
+        const created = await api.workouts.create(dayKey, todayISO())
+        setWorkout(created)
+        if (created.started_at) return
+      } catch (e) {
+        setError(e.message)
+        return
+      } finally {
+        setPending(false)
+      }
+    }
+    await stamp({ started_at: 'now', ended_at: null })
+  }
+
+  function setField(slotKey, idx, field, value) {
     setRows((r) => {
-      const list = [...(r[exKey] || [])]
+      const list = [...(r[slotKey] || [])]
       list[idx] = { ...(list[idx] || {}), [field]: value }
-      return { ...r, [exKey]: list }
+      return { ...r, [slotKey]: list }
     })
   }
 
-  async function validateSet(ex, idx) {
-    const row = rows[ex.key]?.[idx] || {}
-    const weight = parseFloat(String(row.weight).replace(',', '.'))
-    const reps = parseInt(row.reps, 10)
-    if (Number.isNaN(weight) || Number.isNaN(reps)) return
+  /**
+   * `suggestion` sert aux montées en charge : leurs champs restent vides mais la
+   * charge calculée s'affiche en indication, et valider sans rien taper
+   * enregistre cette indication. Un échauffement se fait donc en un geste.
+   */
+  async function validateSet(ex, idx, { warmup = false, suggestion = null } = {}) {
+    const key = slot(ex.key, warmup)
+    const row = rows[key]?.[idx] || {}
+
+    const typedWeight = parseFloat(String(row.weight ?? '').replace(',', '.'))
+    const typedReps = parseInt(row.reps, 10)
+    const weight = Number.isNaN(typedWeight) ? suggestion?.weight : typedWeight
+    const reps = Number.isNaN(typedReps) ? suggestion?.reps : typedReps
+    if (weight == null || reps == null) return
 
     try {
       const w = await ensureWorkout()
@@ -185,6 +254,9 @@ export default function Seance({ onStartRest, onOpenMuscle }) {
         weight,
         reps,
         rpe: row.rpe ? parseFloat(String(row.rpe).replace(',', '.')) : null,
+        warmup,
+        // `date` et non todayISO() : la séance affichée n'est pas forcément
+        // celle du jour depuis que la navigation est calendaire.
         performed_at: date,
         // Seuls les exercices hors programme portent leur libellé : ceux du
         // programme tirent le leur de src/program.js.
@@ -195,27 +267,40 @@ export default function Seance({ onStartRest, onOpenMuscle }) {
         await api.sets.update(row.id, payload)
       } else {
         const created = await api.sets.create(payload)
-        setField(ex.key, idx, 'id', created.id)
-        onStartRest(ex.rest, ex.name)
+        setField(key, idx, 'id', created.id)
+        // Une suggestion validée devient une valeur affichée, plus une indication.
+        setField(key, idx, 'weight', String(weight))
+        setField(key, idx, 'reps', String(reps))
+        // Pas de chrono après une montée en charge : on enchaîne.
+        if (!warmup) onStartRest(ex.rest, ex.name)
       }
     } catch (e) {
       setError(e.message)
     }
   }
 
-  async function unvalidateSet(ex, idx) {
-    const row = rows[ex.key]?.[idx]
+  async function unvalidateSet(ex, idx, warmup = false) {
+    const key = slot(ex.key, warmup)
+    const row = rows[key]?.[idx]
     if (!row?.id) return
     try {
       await api.sets.remove(row.id)
-      setField(ex.key, idx, 'id', undefined)
+      setField(key, idx, 'id', undefined)
     } catch (e) {
       setError(e.message)
     }
   }
 
-  const doneCount = Object.values(rows).flat().filter((r) => r?.id).length
-  const totalSets = day.exercises.reduce((n, e) => n + e.sets, 0)
+  // Le compteur ne suit que les séries de travail — `rows[ex.key]` est
+  // l'emplacement de travail, l'échauffement vit sous `ex.key:w` et n'est pas
+  // le travail de la séance. Les exercices ajoutés à la volée comptent, eux :
+  // les exclure afficherait « 12/19 » alors que tu as bien fait 15 séries.
+  const compté = [...day.exercises, ...extras]
+  const doneCount = compté.reduce(
+    (n, ex) => n + (rows[ex.key] || []).filter((r) => r?.id).length,
+    0
+  )
+  const totalSets = compté.reduce((n, e) => n + e.sets, 0)
 
   return (
     <>
@@ -276,8 +361,23 @@ export default function Seance({ onStartRest, onOpenMuscle }) {
         </p>
       </div>
 
+      <BarreSeance
+        workout={workout}
+        pending={pending}
+        onStart={startSession}
+        onFinish={() => stamp({ ended_at: 'now' })}
+        onReopen={() => stamp({ ended_at: null })}
+      />
+
       {error && <div className="banner">Erreur : {error}</div>}
+
+      {workout?.ended_at && (
+        <Bilan day={day} workout={workout} rows={rows} last={last} best={best} />
+      )}
+
       {day.note && <div className="banner">{day.note}</div>}
+
+      {day.warmup?.length > 0 && <Echauffement items={day.warmup} />}
 
       {loading ? (
         <div className="spinner">Chargement…</div>
@@ -289,10 +389,11 @@ export default function Seance({ onStartRest, onOpenMuscle }) {
                 key={ex.key}
                 ex={ex}
                 rows={rows[ex.key] || []}
+                warmRows={rows[slot(ex.key, true)] || []}
                 last={last[ex.key]}
-                onField={(idx, f, v) => setField(ex.key, idx, f, v)}
-                onValidate={(idx) => validateSet(ex, idx)}
-                onUnvalidate={(idx) => unvalidateSet(ex, idx)}
+                onField={(idx, f, v, warmup) => setField(slot(ex.key, warmup), idx, f, v)}
+                onValidate={(idx, opts) => validateSet(ex, idx, opts)}
+                onUnvalidate={(idx, warmup) => unvalidateSet(ex, idx, warmup)}
                 onOpenMuscle={onOpenMuscle}
               />
             ))}
@@ -307,10 +408,11 @@ export default function Seance({ onStartRest, onOpenMuscle }) {
                     key={ex.key}
                     ex={ex}
                     rows={rows[ex.key] || []}
+                    warmRows={rows[slot(ex.key, true)] || []}
                     last={last[ex.key]}
-                    onField={(idx, f, v) => setField(ex.key, idx, f, v)}
-                    onValidate={(idx) => validateSet(ex, idx)}
-                    onUnvalidate={(idx) => unvalidateSet(ex, idx)}
+                    onField={(idx, f, v, warmup) => setField(slot(ex.key, warmup), idx, f, v)}
+                    onValidate={(idx, opts) => validateSet(ex, idx, opts)}
+                    onUnvalidate={(idx, warmup) => unvalidateSet(ex, idx, warmup)}
                     onOpenMuscle={onOpenMuscle}
                     onRemove={
                       (rows[ex.key] || []).some((r) => r?.id)
@@ -443,15 +545,57 @@ function AjoutExercice({ day, extras, knownCustom, onAdd }) {
   )
 }
 
-function Exercice({ ex, rows, last, onField, onValidate, onUnvalidate, onRemove, onOpenMuscle }) {
+/** Échauffement général de la séance : des consignes, rien à enregistrer. */
+function Echauffement({ items }) {
+  const [open, setOpen] = useState(true)
+
+  return (
+    <div className="card tight">
+      <button
+        className="btn ghost sm"
+        style={{ padding: 0, width: '100%', textAlign: 'left' }}
+        onClick={() => setOpen(!open)}
+      >
+        <span style={{ color: 'var(--ink)', fontWeight: 650 }}>
+          {open ? '−' : '+'} Échauffement
+        </span>
+        <span className="tiny"> · avant la première série</span>
+      </button>
+      {open && (
+        <ul className="warmlist">
+          {items.map((item) => (
+            <li key={item}>{item}</li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
+function Exercice({
+  ex,
+  rows,
+  warmRows,
+  last,
+  onField,
+  onValidate,
+  onUnvalidate,
+  onRemove,
+  onOpenMuscle,
+}) {
   const [open, setOpen] = useState(false)
+
+  // Charge de référence pour les montées en charge : la plus lourde de la
+  // dernière séance sur cet exercice.
+  const working = last?.sets?.length ? Math.max(...last.sets.map((s) => s.weight || 0)) : null
+  const ramp = useMemo(() => rampSets(ex, working || null), [ex, working])
 
   return (
     <div className="exo">
       <div className="exo-head">
         <div style={{ minWidth: 0 }}>
           <div className="exo-name">
-            {ex.name} {ex.star && <span className="star">★</span>}
+            <ExerciseLink ex={ex} /> {ex.star && <span className="star">★</span>}
           </div>
           <MusclesLies texte={ex.muscles} onOpen={onOpenMuscle} />
         </div>
@@ -459,6 +603,8 @@ function Exercice({ ex, rows, last, onField, onValidate, onUnvalidate, onRemove,
           {ex.sets} × {ex.reps}
           <br />
           RPE {ex.rpe}
+          <br />
+          repos {fmtRest(ex.rest)}
         </div>
       </div>
 
@@ -481,6 +627,38 @@ function Exercice({ ex, rows, last, onField, onValidate, onUnvalidate, onRemove,
         </div>
       )}
 
+      {ramp.length > 0 && (
+        <>
+          <div className="warm-title">
+            Échauffement{' '}
+            <span>
+              {working ? 'montées en charge' : 'aucun historique, à toi de juger'} · 30 à 60 s de
+              repos
+            </span>
+          </div>
+          <div className="sets">
+            {ramp.map((r, i) => (
+              <SetRow
+                key={i}
+                ex={ex}
+                idx={i}
+                warmup
+                row={warmRows[i] || {}}
+                label={`É${i + 1}`}
+                placeholders={{
+                  weight: r.weight == null ? `≈${r.pct} %` : String(r.weight),
+                  reps: String(r.reps),
+                  rpe: '—',
+                }}
+                onField={(f, v) => onField(i, f, v, true)}
+                onValidate={() => onValidate(i, { warmup: true, suggestion: r })}
+                onUnvalidate={() => onUnvalidate(i, true)}
+              />
+            ))}
+          </div>
+        </>
+      )}
+
       <div className="setlabels" aria-hidden="true">
         <span>#</span>
         <span>kg</span>
@@ -490,49 +668,19 @@ function Exercice({ ex, rows, last, onField, onValidate, onUnvalidate, onRemove,
       </div>
 
       <div className="sets">
-        {Array.from({ length: ex.sets }, (_, i) => {
-          const row = rows[i] || {}
-          const done = Boolean(row.id)
-          return (
-            <div className={`setrow${done ? ' done' : ''}`} key={i}>
-              <div className="idx">{i + 1}</div>
-              <input
-                type="number"
-                inputMode="decimal"
-                step="0.5"
-                placeholder="—"
-                aria-label={`${ex.name} série ${i + 1}, charge en kg`}
-                value={row.weight ?? ''}
-                onChange={(e) => onField(i, 'weight', e.target.value)}
-              />
-              <input
-                type="number"
-                inputMode="numeric"
-                placeholder={ex.reps}
-                aria-label={`${ex.name} série ${i + 1}, répétitions`}
-                value={row.reps ?? ''}
-                onChange={(e) => onField(i, 'reps', e.target.value)}
-              />
-              <input
-                type="number"
-                inputMode="decimal"
-                step="0.5"
-                placeholder={ex.rpe}
-                aria-label={`${ex.name} série ${i + 1}, RPE`}
-                value={row.rpe ?? ''}
-                onChange={(e) => onField(i, 'rpe', e.target.value)}
-              />
-              <button
-                className={`ok${done ? ' done' : ''}`}
-                onClick={() => (done ? onUnvalidate(i) : onValidate(i))}
-                aria-label={done ? 'Annuler la validation' : 'Valider la série'}
-                title={done ? 'Annuler' : 'Valider et démarrer le repos'}
-              >
-                ✓
-              </button>
-            </div>
-          )
-        })}
+        {Array.from({ length: ex.sets }, (_, i) => (
+          <SetRow
+            key={i}
+            ex={ex}
+            idx={i}
+            row={rows[i] || {}}
+            label={String(i + 1)}
+            placeholders={{ weight: '—', reps: ex.reps, rpe: ex.rpe }}
+            onField={(f, v) => onField(i, f, v, false)}
+            onValidate={() => onValidate(i, {})}
+            onUnvalidate={() => onUnvalidate(i, false)}
+          />
+        ))}
       </div>
 
       {/* En fin de bloc, à l'écart du bouton de consigne : c'est une action
@@ -580,6 +728,249 @@ function MusclesLies({ texte, onOpen }) {
         ) : (
           <span key={i}>{s.text}</span>
         )
+      )}
+    </div>
+  )
+}
+
+function SetRow({
+  ex,
+  idx,
+  row,
+  label,
+  placeholders,
+  warmup = false,
+  onField,
+  onValidate,
+  onUnvalidate,
+}) {
+  const done = Boolean(row.id)
+  const quoi = warmup ? `échauffement ${idx + 1}` : `série ${idx + 1}`
+
+  return (
+    <div className={`setrow${done ? ' done' : ''}${warmup ? ' warm' : ''}`}>
+      <div className="idx">{label}</div>
+      <input
+        type="number"
+        inputMode="decimal"
+        step="0.5"
+        placeholder={placeholders.weight}
+        aria-label={`${ex.name} ${quoi}, charge en kg`}
+        value={row.weight ?? ''}
+        onChange={(e) => onField('weight', e.target.value)}
+      />
+      <input
+        type="number"
+        inputMode="numeric"
+        placeholder={placeholders.reps}
+        aria-label={`${ex.name} ${quoi}, répétitions`}
+        value={row.reps ?? ''}
+        onChange={(e) => onField('reps', e.target.value)}
+      />
+      <input
+        type="number"
+        inputMode="decimal"
+        step="0.5"
+        placeholder={placeholders.rpe}
+        aria-label={`${ex.name} ${quoi}, RPE`}
+        value={row.rpe ?? ''}
+        onChange={(e) => onField('rpe', e.target.value)}
+      />
+      <button
+        className={`ok${done ? ' done' : ''}`}
+        onClick={() => (done ? onUnvalidate() : onValidate())}
+        aria-label={done ? 'Annuler la validation' : 'Valider'}
+        title={
+          done ? 'Annuler' : warmup ? 'Valider la montée en charge' : 'Valider et démarrer le repos'
+        }
+      >
+        ✓
+      </button>
+    </div>
+  )
+}
+
+/** Bouton global de début et de fin de séance, avec le temps écoulé. */
+function BarreSeance({ workout, pending, onStart, onFinish, onReopen }) {
+  const started = workout?.started_at
+  const ended = workout?.ended_at
+
+  if (!started) {
+    return (
+      <button
+        className="btn primary block"
+        style={{ marginBottom: 12 }}
+        onClick={onStart}
+        disabled={pending}
+      >
+        ▶ Démarrer la séance
+      </button>
+    )
+  }
+
+  if (ended) {
+    return (
+      <div className="sessionbar over">
+        <div>
+          <div className="t">{fmtDuration(new Date(ended) - new Date(started))}</div>
+          <div className="l">Séance terminée</div>
+        </div>
+        <button className="btn sm" onClick={onReopen} disabled={pending}>
+          Reprendre
+        </button>
+      </div>
+    )
+  }
+
+  return (
+    <div className="sessionbar">
+      <div>
+        <div className="t">
+          <Elapsed from={started} />
+        </div>
+        <div className="l">Séance en cours</div>
+      </div>
+      <button className="btn sm" onClick={onFinish} disabled={pending}>
+        Terminer
+      </button>
+    </div>
+  )
+}
+
+/** Isolé dans son composant pour que la seconde qui tourne ne réaffiche que lui. */
+function Elapsed({ from }) {
+  const [now, setNow] = useState(() => Date.now())
+
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(id)
+  }, [])
+
+  return fmtDuration(now - new Date(from).getTime())
+}
+
+/**
+ * Bilan de fin de séance. Tout est recalculé depuis les séries validées du
+ * jour : la base ne stocke rien de plus que les deux horodatages.
+ */
+function Bilan({ day, workout, rows, last, best }) {
+  const stats = useMemo(() => {
+    let sets = 0
+    let warmSets = 0
+    let tonnage = 0
+    let rpeSum = 0
+    let rpeCount = 0
+    let exercises = 0
+    const records = []
+
+    for (const ex of day.exercises) {
+      const done = (rows[ex.key] || []).filter((r) => r?.id)
+      warmSets += (rows[`${ex.key}:w`] || []).filter((r) => r?.id).length
+      if (!done.length) continue
+
+      exercises += 1
+      let top = 0
+      for (const r of done) {
+        const kg = parseFloat(String(r.weight).replace(',', '.')) || 0
+        const reps = parseInt(r.reps, 10) || 0
+        sets += 1
+        tonnage += kg * reps
+        if (kg > top) top = kg
+        const rpe = parseFloat(String(r.rpe).replace(',', '.'))
+        if (!Number.isNaN(rpe)) {
+          rpeSum += rpe
+          rpeCount += 1
+        }
+      }
+
+      // Un record se compare à un historique : sans passé sur l'exercice, il
+      // n'y a rien à annoncer.
+      if (best[ex.key] != null && top > best[ex.key]) {
+        records.push({ key: ex.key, name: ex.name, top, previous: best[ex.key] })
+      }
+    }
+
+    // Tonnage de la fois précédente, exercice par exercice, échauffements exclus.
+    const prevTonnage = Object.values(last).reduce(
+      (n, e) => n + e.sets.reduce((m, s) => m + (s.weight || 0) * (s.reps || 0), 0),
+      0
+    )
+
+    const ms =
+      workout.started_at && workout.ended_at
+        ? new Date(workout.ended_at) - new Date(workout.started_at)
+        : null
+
+    return {
+      sets,
+      warmSets,
+      exercises,
+      records,
+      tonnage: Math.round(tonnage),
+      prevTonnage: Math.round(prevTonnage),
+      plannedSets: day.exercises.reduce((n, e) => n + e.sets, 0),
+      rpe: rpeCount ? Math.round((rpeSum / rpeCount) * 10) / 10 : null,
+      ms,
+      perSet: ms && sets ? ms / sets : null,
+    }
+  }, [day, rows, last, best, workout])
+
+  const deltaTonnage =
+    stats.prevTonnage > 0 && stats.tonnage > 0
+      ? Math.round(((stats.tonnage - stats.prevTonnage) / stats.prevTonnage) * 100)
+      : null
+
+  return (
+    <div className="card">
+      <h3>Bilan de la séance</h3>
+      <p className="tiny" style={{ marginBottom: 12 }}>
+        {stats.exercises}/{day.exercises.length} exercices abordés,{' '}
+        {stats.sets}/{stats.plannedSets} séries de travail validées
+        {stats.warmSets > 0 && ` (+ ${stats.warmSets} d'échauffement)`}.
+      </p>
+
+      <div className="stats">
+        {stats.ms != null && (
+          <div className="stat">
+            <div className="v">{fmtDuration(stats.ms)}</div>
+            <div className="l">Durée totale</div>
+            {stats.perSet != null && (
+              <div className="d">{fmtDuration(stats.perSet)} par série</div>
+            )}
+          </div>
+        )}
+        <div className="stat">
+          <div className="v">{stats.tonnage.toLocaleString('fr-FR')} kg</div>
+          <div className="l">Tonnage</div>
+          {deltaTonnage != null && deltaTonnage !== 0 && (
+            <div className={`d ${deltaTonnage > 0 ? 'up' : 'down'}`}>
+              {deltaTonnage > 0 ? '+' : ''}
+              {deltaTonnage} % vs dernière fois
+            </div>
+          )}
+        </div>
+        {stats.rpe != null && (
+          <div className="stat">
+            <div className="v">{stats.rpe}</div>
+            <div className="l">RPE moyen</div>
+          </div>
+        )}
+      </div>
+
+      {stats.records.length > 0 && (
+        <div className="records">
+          {stats.records.map((r) => (
+            <div key={r.key}>
+              <b>Record</b> {r.name} — {r.top} kg <span>(avant {r.previous} kg)</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {stats.sets === 0 && (
+        <p className="tiny" style={{ marginTop: 10 }}>
+          Aucune série de travail validée : le bilan restera vide tant que rien n'est enregistré.
+        </p>
       )}
     </div>
   )

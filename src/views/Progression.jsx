@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { api } from '../api'
 import { EXERCISES, estimate1RM, getExercise } from '../program'
 import LineChartCard from '../components/LineChartCard'
+import ExerciseLink from '../components/ExerciseLink'
 
 const STARRED = EXERCISES.filter((e) => e.star)
 
@@ -54,6 +55,9 @@ export default function Progression() {
   const series = useMemo(() => {
     const byDate = new Map()
     for (const s of sets) {
+      // Une montée en charge n'est pas une performance : elle ne doit pas
+      // entrer dans les courbes, ni dans le volume, ni dans le compte de séries.
+      if (s.warmup) continue
       const cur = byDate.get(s.performed_at) || { top: 0, e1rm: 0, volume: 0, count: 0, best: null }
       if (s.weight > cur.top) {
         cur.top = s.weight
@@ -166,7 +170,8 @@ export default function Progression() {
           <div className="card">
             <div className="charthead">
               <h3>
-                {ex?.name} — {mode === 'top' ? 'charge la plus lourde' : '1RM estimé'}
+                <ExerciseLink ex={ex} /> —{' '}
+                {mode === 'top' ? 'charge la plus lourde' : '1RM estimé'}
               </h3>
               <button className="btn ghost sm" onClick={() => setShowTable((v) => !v)}>
                 {showTable ? 'Graphique' : 'Tableau'}

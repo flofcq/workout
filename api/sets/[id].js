@@ -15,7 +15,7 @@ export default handler({
           rpe    = ${num(b.rpe)}
       where id = ${req.query.id} and user_id = ${user.id}
       returning id, workout_id, exercise_key, exercise_name, set_index,
-                 weight::float8 as weight, reps, rpe::float8 as rpe,
+                 weight::float8 as weight, reps, rpe::float8 as rpe, warmup,
                  performed_at::text as performed_at
     `
     if (!rows.length) return res.status(404).json({ error: 'Série introuvable' })

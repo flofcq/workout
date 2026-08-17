@@ -72,6 +72,9 @@ const realApi = {
       request('/workouts', { method: 'POST', body: { day_key: dayKey, date } }).then(
         (d) => d.workout
       ),
+    // 'now' pour horodater côté serveur, null pour effacer.
+    update: (id, payload) =>
+      request(`/workouts/${id}`, { method: 'PATCH', body: payload }).then((d) => d.workout),
     remove: (id) => request(`/workouts/${id}`, { method: 'DELETE' }),
   },
 
