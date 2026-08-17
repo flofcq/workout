@@ -297,7 +297,7 @@ export const PROGRAM = [
 ]
 
 export const EXERCISES = PROGRAM.flatMap((d) =>
-  d.exercises.map((e) => ({ ...e, dayKey: d.key, dayTitle: d.title }))
+  d.exercises.map((e) => ({ ...e, dayKey: d.key, dayTitle: d.title, dayName: d.day }))
 )
 
 export function getDay(key) {

@@ -178,6 +178,20 @@ p:last-child { margin-bottom: 0; }
 .mus-def dd { margin: 0 0 9px; line-height: 1.45; }
 .mus-def dd:last-child { margin-bottom: 0; }
 
+/* Muscle cliquable dans la ligne d'un exercice. Souligné en pointillé plutôt
+   que coloré : il y en a jusqu'à cinq par ligne, et cinq mots en accent
+   feraient un sapin de Noël. */
+.mus-link {
+  border: 0; background: none; padding: 0; margin: 0;
+  font: inherit; color: var(--ink); cursor: pointer;
+  text-decoration: underline dotted var(--muted);
+  text-underline-offset: 2px;
+}
+.mus-link:hover, .mus-link:focus-visible { color: var(--accent); text-decoration-color: var(--accent); }
+
+/* Fiche atteinte depuis une séance : signalée le temps qu'on la repère. */
+.card.mus-target { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+
 .mus-parts { margin-top: 6px; display: flex; flex-direction: column; gap: 8px; }
 .mus-part {
   background: var(--card-2); border-radius: 7px; padding: 8px 10px;

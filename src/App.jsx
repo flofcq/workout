@@ -22,6 +22,9 @@ export default function App() {
   const [serverDown, setServerDown] = useState(false)
   const [tab, setTab] = useState('seance')
   const [timer, setTimer] = useState(null) // { seconds, label, id }
+  // Fiche muscle visée depuis une séance. Vidée dès que l'onglet Muscles l'a
+  // consommée, sinon revenir sur l'onglet re-défilerait vers l'ancienne cible.
+  const [muscleTarget, setMuscleTarget] = useState(null)
   const update = useAppUpdate()
 
   useEffect(() => {
@@ -37,6 +40,15 @@ export default function App() {
   const startRest = useCallback((seconds, label) => {
     setTimer({ seconds, label, id: Date.now() })
   }, [])
+
+  const openMuscle = useCallback((key) => {
+    setMuscleTarget(key)
+    setTab('muscles')
+  }, [])
+
+  // useCallback obligatoire : cette fonction est une dépendance d'effet dans
+  // Muscles, une identité neuve à chaque rendu le relancerait en boucle.
+  const clearMuscleTarget = useCallback(() => setMuscleTarget(null), [])
 
   async function logout() {
     await api.auth.logout()
@@ -59,11 +71,13 @@ export default function App() {
           </button>
         </div>
 
-        {tab === 'seance' && <Seance onStartRest={startRest} />}
+        {tab === 'seance' && <Seance onStartRest={startRest} onOpenMuscle={openMuscle} />}
         {tab === 'historique' && <Historique />}
         {tab === 'progression' && <Progression />}
         {tab === 'corps' && <Corps />}
-        {tab === 'muscles' && <Muscles />}
+        {tab === 'muscles' && (
+          <Muscles target={muscleTarget} onTargetHandled={clearMuscleTarget} />
+        )}
       </div>
 
       {/* Les deux occupent la même place au-dessus de la navigation ; le repos

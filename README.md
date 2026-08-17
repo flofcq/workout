@@ -7,7 +7,7 @@ Application web pour enregistrer tes séances et tes charges, avec le programme
 - **Historique** — toutes tes séances passées, dépliables.
 - **Progression** — courbes d'évolution par exercice (charge la plus lourde ou 1RM estimé).
 - **Corps** — poids, mensurations et nombre de pas dans le temps.
-- **Muscles** — fiche par muscle : où il est, ce qu'il fait, ses faisceaux, et les exercices du programme qui le travaillent.
+- **Muscles** — fiche par muscle : où il est, ce qu'il fait, ses faisceaux, et les exercices du programme qui le travaillent. Les muscles cités sous chaque exercice de la séance sont **cliquables** et mènent droit à leur fiche.
 
 Fonctionne sur téléphone, synchronisé entre appareils.
 
@@ -308,6 +308,35 @@ c'est ce qui affiche « Dans ton programme » sous la fiche.
   exercises: ['dc_barre', 'dips'],   // clés de src/program.js
 }
 ```
+
+### Muscles cliquables dans la séance
+
+La ligne sous chaque exercice (« Grand pectoral (faisceau moyen) · deltoïde
+antérieur, triceps ») est du texte rédigé pour être lu, pas une liste de clés.
+Les noms de muscles y sont repérés à la lecture et rendus cliquables, sans que
+le texte affiché change d'un caractère — « deltoïde antérieur » reste tel quel,
+il ne devient pas « Deltoïde ».
+
+Le nom de la fiche suffit dans la plupart des cas. Quand le programme emploie une
+autre formulation, elle se déclare dans le champ `matches` de la fiche :
+
+```js
+{
+  key: 'coiffe',
+  name: 'Coiffe des rotateurs',
+  matches: ['sus-épineux', 'sous-épineux', 'rotateurs externes'],
+  ...
+}
+```
+
+Les termes sont essayés du plus long au plus court, ce qui évite deux pièges :
+« trapèze » ne masque pas « trapèze supérieur », et « biceps fémoral » pointe les
+ischio-jambiers plutôt que le biceps du bras. Les qualificatifs (« faisceau
+moyen », « chef long », « antérieur ») restent volontairement en texte simple :
+ils précisent un muscle déjà lié juste avant.
+
+Si tu ajoutes un exercice au programme et que ses muscles ne sont pas cliquables,
+c'est qu'il manque un `matches` — 100 liens couvrent aujourd'hui les 34 exercices.
 
 Si tu retires un exercice du programme, sa clé est simplement ignorée ici : la fiche
 continue de s'afficher sans lui.

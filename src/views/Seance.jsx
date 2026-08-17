@@ -8,6 +8,7 @@ import {
   getDay,
   getExercise,
 } from '../program'
+import { splitMuscleText } from '../muscles'
 import { parseDate, shiftDate, todayISO } from '../date'
 
 // Le programme est ancré sur les jours de la semaine. On s'en sert pour
@@ -29,7 +30,7 @@ function formatLong(iso) {
   })
 }
 
-export default function Seance({ onStartRest }) {
+export default function Seance({ onStartRest, onOpenMuscle }) {
   const [date, setDate] = useState(todayISO)
   // Choix manuel de séance, mémorisé avec la date à laquelle il s'applique.
   // Changer de date l'invalide donc tout seul, et la suggestion du jour
@@ -292,6 +293,7 @@ export default function Seance({ onStartRest }) {
                 onField={(idx, f, v) => setField(ex.key, idx, f, v)}
                 onValidate={(idx) => validateSet(ex, idx)}
                 onUnvalidate={(idx) => unvalidateSet(ex, idx)}
+                onOpenMuscle={onOpenMuscle}
               />
             ))}
           </div>
@@ -309,6 +311,7 @@ export default function Seance({ onStartRest }) {
                     onField={(idx, f, v) => setField(ex.key, idx, f, v)}
                     onValidate={(idx) => validateSet(ex, idx)}
                     onUnvalidate={(idx) => unvalidateSet(ex, idx)}
+                    onOpenMuscle={onOpenMuscle}
                     onRemove={
                       (rows[ex.key] || []).some((r) => r?.id)
                         ? null
@@ -440,7 +443,7 @@ function AjoutExercice({ day, extras, knownCustom, onAdd }) {
   )
 }
 
-function Exercice({ ex, rows, last, onField, onValidate, onUnvalidate, onRemove }) {
+function Exercice({ ex, rows, last, onField, onValidate, onUnvalidate, onRemove, onOpenMuscle }) {
   const [open, setOpen] = useState(false)
 
   return (
@@ -450,7 +453,7 @@ function Exercice({ ex, rows, last, onField, onValidate, onUnvalidate, onRemove 
           <div className="exo-name">
             {ex.name} {ex.star && <span className="star">★</span>}
           </div>
-          <div className="exo-mus">{ex.muscles}</div>
+          <MusclesLies texte={ex.muscles} onOpen={onOpenMuscle} />
         </div>
         <div className="exo-spec">
           {ex.sets} × {ex.reps}
@@ -543,6 +546,40 @@ function Exercice({ ex, rows, last, onField, onValidate, onUnvalidate, onRemove 
         >
           Retirer de la séance
         </button>
+      )}
+    </div>
+  )
+}
+
+/**
+ * La ligne « muscles » d'un exercice, avec les muscles reconnus rendus
+ * cliquables. Le texte d'origine est conservé mot pour mot : on n'affiche
+ * jamais le libellé de la fiche à la place, « deltoïde antérieur » resterait
+ * sinon un simple « Deltoïde » et perdrait sa précision.
+ */
+function MusclesLies({ texte, onOpen }) {
+  const segments = useMemo(() => splitMuscleText(texte), [texte])
+
+  // Sans gestionnaire (mode démo d'un composant isolé, ou futur réemploi),
+  // on retombe sur du texte simple plutôt que des boutons inertes.
+  if (!onOpen) return <div className="exo-mus">{texte}</div>
+
+  return (
+    <div className="exo-mus">
+      {segments.map((s, i) =>
+        s.muscleKey ? (
+          <button
+            key={i}
+            type="button"
+            className="mus-link"
+            onClick={() => onOpen(s.muscleKey)}
+            title={`Voir la fiche ${s.text}`}
+          >
+            {s.text}
+          </button>
+        ) : (
+          <span key={i}>{s.text}</span>
+        )
       )}
     </div>
   )

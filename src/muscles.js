@@ -55,6 +55,7 @@ export const MUSCLES = [
   // --------------------------------------------------------------------- Dos
   {
     key: 'grand_dorsal',
+    matches: ['dorsaux'],
     region: 'dos',
     name: 'Grand dorsal',
     aka: 'latissimus dorsi, « les dorsaux »',
@@ -78,6 +79,7 @@ export const MUSCLES = [
   },
   {
     key: 'trapeze',
+    matches: ['trapèzes'],
     region: 'dos',
     name: 'Trapèze',
     where: "Grand losange de la base du crâne au milieu du dos, et d'une épaule à l'autre.",
@@ -104,6 +106,7 @@ export const MUSCLES = [
   },
   {
     key: 'erecteurs',
+    matches: ['érecteurs'],
     region: 'dos',
     name: 'Érecteurs du rachis',
     aka: 'les spinaux, « les lombaires »',
@@ -140,6 +143,7 @@ export const MUSCLES = [
   },
   {
     key: 'coiffe',
+    matches: ['sus-épineux', 'sous-épineux', 'rotateurs externes', 'petit rond', 'sous-scapulaire'],
     region: 'epaules',
     name: 'Coiffe des rotateurs',
     aka: 'sus-épineux, sous-épineux, petit rond, sous-scapulaire',
@@ -153,6 +157,7 @@ export const MUSCLES = [
   // -------------------------------------------------------------------- Bras
   {
     key: 'biceps',
+    matches: ['biceps'],
     region: 'bras',
     name: 'Biceps brachial',
     where: "Sur l'avant du bras, de l'omoplate au radius. Il croise deux articulations : l'épaule et le coude.",
@@ -166,6 +171,7 @@ export const MUSCLES = [
   },
   {
     key: 'brachial',
+    matches: ['brachial'],
     region: 'bras',
     name: 'Brachial antérieur',
     where: "Sous le biceps, de l'humérus au cubitus.",
@@ -176,6 +182,7 @@ export const MUSCLES = [
   },
   {
     key: 'brachio_radial',
+    matches: ['brachio-radial', 'avant-bras'],
     region: 'bras',
     name: 'Brachio-radial et avant-bras',
     where: "Sur le dessus de l'avant-bras, du coude au poignet.",
@@ -185,6 +192,7 @@ export const MUSCLES = [
   },
   {
     key: 'triceps',
+    matches: ['triceps', 'chefs latéral et médial'],
     region: 'bras',
     name: 'Triceps brachial',
     where: "Tout l'arrière du bras. Il représente les deux tiers du volume du bras, largement plus que le biceps.",
@@ -204,6 +212,7 @@ export const MUSCLES = [
   // ------------------------------------------------------------------- Tronc
   {
     key: 'grand_droit',
+    matches: ['grand droit'],
     region: 'tronc',
     name: "Grand droit de l'abdomen",
     aka: 'les « abdos », la tablette',
@@ -233,6 +242,7 @@ export const MUSCLES = [
   },
   {
     key: 'psoas',
+    matches: ['psoas', 'fléchisseur de hanche'],
     region: 'tronc',
     name: 'Psoas-iliaque',
     aka: 'fléchisseur de hanche',
@@ -245,6 +255,7 @@ export const MUSCLES = [
   // ------------------------------------------------------------------ Jambes
   {
     key: 'quadriceps',
+    matches: ['droit fémoral'],
     region: 'jambes',
     name: 'Quadriceps',
     where: "Quatre muscles sur l'avant de la cuisse, tous terminés sur la rotule.",
@@ -263,6 +274,7 @@ export const MUSCLES = [
   },
   {
     key: 'ischios',
+    matches: ['ischios', 'biceps fémoral', 'semi-tendineux', 'semi-membraneux'],
     region: 'jambes',
     name: 'Ischio-jambiers',
     aka: 'biceps fémoral, semi-tendineux, semi-membraneux',
@@ -274,6 +286,7 @@ export const MUSCLES = [
   },
   {
     key: 'fessiers',
+    matches: ['grand fessier', 'moyen fessier'],
     region: 'jambes',
     name: 'Fessiers',
     where: "Grand fessier en surface, moyen et petit fessiers sur le côté de la hanche.",
@@ -294,6 +307,7 @@ export const MUSCLES = [
   },
   {
     key: 'mollets',
+    matches: ['gastrocnémiens', 'gastrocnémien', 'soléaire'],
     region: 'jambes',
     name: 'Mollets',
     where: "Arrière de la jambe, du genou et du tibia jusqu'au tendon d'Achille.",
@@ -316,4 +330,62 @@ export const MUSCLES = [
 export function musclesByRegion(regionKey) {
   if (!regionKey || regionKey === 'tous') return MUSCLES
   return MUSCLES.filter((m) => m.region === regionKey)
+}
+
+export function getMuscle(key) {
+  return MUSCLES.find((m) => m.key === key)
+}
+
+// ---------- Reconnaissance des muscles dans le texte des exercices ----------
+//
+// Le champ `muscles` de src/program.js est du texte libre rédigé pour être lu
+// (« Grand pectoral (faisceau moyen) · deltoïde antérieur, triceps »). Pour le
+// rendre cliquable, on y repère les noms de fiches et les formulations
+// équivalentes déclarées dans `matches`.
+
+const strip = (s) =>
+  s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+
+// Index [terme normalisé, clé de fiche], du plus long au plus court : sans ce
+// tri, « trapèze » masquerait « trapèze supérieur », et « grand droit » serait
+// coupé par « grand ».
+const TERMS = MUSCLES.flatMap((m) => [m.name, ...(m.matches || [])].map((t) => [strip(t), m.key]))
+  .sort((a, b) => b[0].length - a[0].length)
+
+/**
+ * Découpe un texte en segments : `{ text }` pour ce qui n'est pas reconnu,
+ * `{ text, muscleKey }` pour un muscle. La casse et les accents d'origine sont
+ * conservés — on renvoie des tranches du texte d'entrée, jamais le libellé de
+ * la fiche, pour que « deltoïde antérieur » reste tel quel à l'écran.
+ */
+export function splitMuscleText(text) {
+  const source = String(text || '')
+  const cible = strip(source) // même longueur : NFD ne retire que des marques
+  const out = []
+  let i = 0
+  let plain = ''
+
+  while (i < source.length) {
+    const hit = TERMS.find(([terme]) => cible.startsWith(terme, i))
+    // Un terme ne compte que s'il n'est pas collé à un autre mot : sans cette
+    // borne, « brachial » se déclencherait à l'intérieur de « brachio-radial ».
+    const borneOk =
+      hit &&
+      (i === 0 || !/[a-z0-9]/.test(cible[i - 1])) &&
+      !/[a-z0-9]/.test(cible[i + hit[0].length] || ' ')
+
+    if (borneOk) {
+      if (plain) {
+        out.push({ text: plain })
+        plain = ''
+      }
+      out.push({ text: source.slice(i, i + hit[0].length), muscleKey: hit[1] })
+      i += hit[0].length
+    } else {
+      plain += source[i]
+      i += 1
+    }
+  }
+  if (plain) out.push({ text: plain })
+  return out
 }
