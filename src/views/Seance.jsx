@@ -1,9 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { api } from '../api'
-import { PROGRAM, getDay } from '../program'
+import { PROGRAM, getDay, rampSets } from '../program'
 import ExerciseLink from '../components/ExerciseLink'
 
 const todayISO = () => new Date().toISOString().slice(0, 10)
+
+// Les séries d'échauffement et de travail d'un même exercice se numérotent
+// toutes les deux à partir de 0 : elles occupent donc deux emplacements
+// distincts dans l'état, comme elles occupent deux clés distinctes en base.
+const slot = (exKey, warmup) => (warmup ? `${exKey}:w` : exKey)
 
 // Le jour de la semaine suggère la séance, mais tu peux toujours en choisir une autre.
 function suggestedDay() {
@@ -14,7 +19,7 @@ function suggestedDay() {
 export default function Seance({ onStartRest }) {
   const [dayKey, setDayKey] = useState(suggestedDay)
   const [workout, setWorkout] = useState(null)
-  const [rows, setRows] = useState({}) // exKey -> [{ weight, reps, rpe, id }]
+  const [rows, setRows] = useState({}) // slot -> [{ weight, reps, rpe, id }]
   const [last, setLast] = useState({}) // exKey -> { date, sets: [] }
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -40,7 +45,7 @@ export default function Seance({ onStartRest }) {
       const current = {}
       if (todaysWorkout) {
         for (const s of all.filter((x) => x.workout_id === todaysWorkout.id)) {
-          ;(current[s.exercise_key] ||= [])[s.set_index] = {
+          ;(current[slot(s.exercise_key, s.warmup)] ||= [])[s.set_index] = {
             id: s.id,
             weight: String(s.weight ?? ''),
             reps: String(s.reps ?? ''),
@@ -49,11 +54,18 @@ export default function Seance({ onStartRest }) {
         }
       }
 
-      // Dernière performance : la séance la plus récente qui n'est pas celle d'aujourd'hui
+      // Dernière performance : la séance la plus récente qui n'est pas celle
+      // d'aujourd'hui. Les échauffements en sont exclus — ce ne sont pas des
+      // performances, et ils fausseraient les montées en charge calculées.
       const prev = {}
       for (const s of all) {
+        if (s.warmup) continue
         if (todaysWorkout && s.workout_id === todaysWorkout.id) continue
-        const e = (prev[s.exercise_key] ||= { workoutId: s.workout_id, date: s.performed_at, sets: [] })
+        const e = (prev[s.exercise_key] ||= {
+          workoutId: s.workout_id,
+          date: s.performed_at,
+          sets: [],
+        })
         if (e.workoutId === s.workout_id) e.sets.push(s)
       }
 
@@ -77,19 +89,28 @@ export default function Seance({ onStartRest }) {
     return created
   }
 
-  function setField(exKey, idx, field, value) {
+  function setField(slotKey, idx, field, value) {
     setRows((r) => {
-      const list = [...(r[exKey] || [])]
+      const list = [...(r[slotKey] || [])]
       list[idx] = { ...(list[idx] || {}), [field]: value }
-      return { ...r, [exKey]: list }
+      return { ...r, [slotKey]: list }
     })
   }
 
-  async function validateSet(ex, idx) {
-    const row = rows[ex.key]?.[idx] || {}
-    const weight = parseFloat(String(row.weight).replace(',', '.'))
-    const reps = parseInt(row.reps, 10)
-    if (Number.isNaN(weight) || Number.isNaN(reps)) return
+  /**
+   * `suggestion` sert aux montées en charge : leurs champs restent vides mais la
+   * charge calculée s'affiche en indication, et valider sans rien taper
+   * enregistre cette indication. Un échauffement se fait donc en un geste.
+   */
+  async function validateSet(ex, idx, { warmup = false, suggestion = null } = {}) {
+    const key = slot(ex.key, warmup)
+    const row = rows[key]?.[idx] || {}
+
+    const typedWeight = parseFloat(String(row.weight ?? '').replace(',', '.'))
+    const typedReps = parseInt(row.reps, 10)
+    const weight = Number.isNaN(typedWeight) ? suggestion?.weight : typedWeight
+    const reps = Number.isNaN(typedReps) ? suggestion?.reps : typedReps
+    if (weight == null || reps == null) return
 
     try {
       const w = await ensureWorkout()
@@ -100,6 +121,7 @@ export default function Seance({ onStartRest }) {
         weight,
         reps,
         rpe: row.rpe ? parseFloat(String(row.rpe).replace(',', '.')) : null,
+        warmup,
         performed_at: todayISO(),
       }
 
@@ -107,26 +129,36 @@ export default function Seance({ onStartRest }) {
         await api.sets.update(row.id, payload)
       } else {
         const created = await api.sets.create(payload)
-        setField(ex.key, idx, 'id', created.id)
-        onStartRest(ex.rest, ex.name)
+        setField(key, idx, 'id', created.id)
+        // Une suggestion validée devient une valeur affichée, plus une indication.
+        setField(key, idx, 'weight', String(weight))
+        setField(key, idx, 'reps', String(reps))
+        // Pas de chrono après une montée en charge : on enchaîne.
+        if (!warmup) onStartRest(ex.rest, ex.name)
       }
     } catch (e) {
       setError(e.message)
     }
   }
 
-  async function unvalidateSet(ex, idx) {
-    const row = rows[ex.key]?.[idx]
+  async function unvalidateSet(ex, idx, warmup = false) {
+    const key = slot(ex.key, warmup)
+    const row = rows[key]?.[idx]
     if (!row?.id) return
     try {
       await api.sets.remove(row.id)
-      setField(ex.key, idx, 'id', undefined)
+      setField(key, idx, 'id', undefined)
     } catch (e) {
       setError(e.message)
     }
   }
 
-  const doneCount = Object.values(rows).flat().filter((r) => r?.id).length
+  // Le compteur ne suit que les séries de travail : l'échauffement n'est pas
+  // le travail de la séance.
+  const doneCount = day.exercises.reduce(
+    (n, ex) => n + (rows[ex.key] || []).filter((r) => r?.id).length,
+    0
+  )
   const totalSets = day.exercises.reduce((n, e) => n + e.sets, 0)
 
   return (
@@ -151,6 +183,8 @@ export default function Seance({ onStartRest }) {
       {error && <div className="banner">Erreur : {error}</div>}
       {day.note && <div className="banner">{day.note}</div>}
 
+      {day.warmup?.length > 0 && <Echauffement items={day.warmup} />}
+
       {loading ? (
         <div className="spinner">Chargement…</div>
       ) : (
@@ -160,10 +194,11 @@ export default function Seance({ onStartRest }) {
               key={ex.key}
               ex={ex}
               rows={rows[ex.key] || []}
+              warmRows={rows[slot(ex.key, true)] || []}
               last={last[ex.key]}
-              onField={(idx, f, v) => setField(ex.key, idx, f, v)}
-              onValidate={(idx) => validateSet(ex, idx)}
-              onUnvalidate={(idx) => unvalidateSet(ex, idx)}
+              onField={(idx, f, v, warmup) => setField(slot(ex.key, warmup), idx, f, v)}
+              onValidate={(idx, opts) => validateSet(ex, idx, opts)}
+              onUnvalidate={(idx, warmup) => unvalidateSet(ex, idx, warmup)}
             />
           ))}
         </div>
@@ -172,8 +207,40 @@ export default function Seance({ onStartRest }) {
   )
 }
 
-function Exercice({ ex, rows, last, onField, onValidate, onUnvalidate }) {
+/** Échauffement général de la séance : des consignes, rien à enregistrer. */
+function Echauffement({ items }) {
+  const [open, setOpen] = useState(true)
+
+  return (
+    <div className="card tight">
+      <button
+        className="btn ghost sm"
+        style={{ padding: 0, width: '100%', textAlign: 'left' }}
+        onClick={() => setOpen(!open)}
+      >
+        <span style={{ color: 'var(--ink)', fontWeight: 650 }}>
+          {open ? '−' : '+'} Échauffement
+        </span>
+        <span className="tiny"> · avant la première série</span>
+      </button>
+      {open && (
+        <ul className="warmlist">
+          {items.map((item) => (
+            <li key={item}>{item}</li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
+function Exercice({ ex, rows, warmRows, last, onField, onValidate, onUnvalidate }) {
   const [open, setOpen] = useState(false)
+
+  // Charge de référence pour les montées en charge : la plus lourde de la
+  // dernière séance sur cet exercice.
+  const working = last?.sets?.length ? Math.max(...last.sets.map((s) => s.weight || 0)) : null
+  const ramp = useMemo(() => rampSets(ex, working || null), [ex, working])
 
   return (
     <div className="exo">
@@ -209,6 +276,35 @@ function Exercice({ ex, rows, last, onField, onValidate, onUnvalidate }) {
         </div>
       )}
 
+      {ramp.length > 0 && (
+        <>
+          <div className="warm-title">
+            Échauffement{' '}
+            <span>{working ? 'montées en charge' : 'aucun historique, à toi de juger'}</span>
+          </div>
+          <div className="sets">
+            {ramp.map((r, i) => (
+              <SetRow
+                key={i}
+                ex={ex}
+                idx={i}
+                warmup
+                row={warmRows[i] || {}}
+                label={`É${i + 1}`}
+                placeholders={{
+                  weight: r.weight == null ? `≈${r.pct} %` : String(r.weight),
+                  reps: String(r.reps),
+                  rpe: '—',
+                }}
+                onField={(f, v) => onField(i, f, v, true)}
+                onValidate={() => onValidate(i, { warmup: true, suggestion: r })}
+                onUnvalidate={() => onUnvalidate(i, true)}
+              />
+            ))}
+          </div>
+        </>
+      )}
+
       <div className="setlabels" aria-hidden="true">
         <span>#</span>
         <span>kg</span>
@@ -218,50 +314,77 @@ function Exercice({ ex, rows, last, onField, onValidate, onUnvalidate }) {
       </div>
 
       <div className="sets">
-        {Array.from({ length: ex.sets }, (_, i) => {
-          const row = rows[i] || {}
-          const done = Boolean(row.id)
-          return (
-            <div className={`setrow${done ? ' done' : ''}`} key={i}>
-              <div className="idx">{i + 1}</div>
-              <input
-                type="number"
-                inputMode="decimal"
-                step="0.5"
-                placeholder="—"
-                aria-label={`${ex.name} série ${i + 1}, charge en kg`}
-                value={row.weight ?? ''}
-                onChange={(e) => onField(i, 'weight', e.target.value)}
-              />
-              <input
-                type="number"
-                inputMode="numeric"
-                placeholder={ex.reps}
-                aria-label={`${ex.name} série ${i + 1}, répétitions`}
-                value={row.reps ?? ''}
-                onChange={(e) => onField(i, 'reps', e.target.value)}
-              />
-              <input
-                type="number"
-                inputMode="decimal"
-                step="0.5"
-                placeholder={ex.rpe}
-                aria-label={`${ex.name} série ${i + 1}, RPE`}
-                value={row.rpe ?? ''}
-                onChange={(e) => onField(i, 'rpe', e.target.value)}
-              />
-              <button
-                className={`ok${done ? ' done' : ''}`}
-                onClick={() => (done ? onUnvalidate(i) : onValidate(i))}
-                aria-label={done ? 'Annuler la validation' : 'Valider la série'}
-                title={done ? 'Annuler' : 'Valider et démarrer le repos'}
-              >
-                ✓
-              </button>
-            </div>
-          )
-        })}
+        {Array.from({ length: ex.sets }, (_, i) => (
+          <SetRow
+            key={i}
+            ex={ex}
+            idx={i}
+            row={rows[i] || {}}
+            label={String(i + 1)}
+            placeholders={{ weight: '—', reps: ex.reps, rpe: ex.rpe }}
+            onField={(f, v) => onField(i, f, v, false)}
+            onValidate={() => onValidate(i, {})}
+            onUnvalidate={() => onUnvalidate(i, false)}
+          />
+        ))}
       </div>
+    </div>
+  )
+}
+
+function SetRow({
+  ex,
+  idx,
+  row,
+  label,
+  placeholders,
+  warmup = false,
+  onField,
+  onValidate,
+  onUnvalidate,
+}) {
+  const done = Boolean(row.id)
+  const quoi = warmup ? `échauffement ${idx + 1}` : `série ${idx + 1}`
+
+  return (
+    <div className={`setrow${done ? ' done' : ''}${warmup ? ' warm' : ''}`}>
+      <div className="idx">{label}</div>
+      <input
+        type="number"
+        inputMode="decimal"
+        step="0.5"
+        placeholder={placeholders.weight}
+        aria-label={`${ex.name} ${quoi}, charge en kg`}
+        value={row.weight ?? ''}
+        onChange={(e) => onField('weight', e.target.value)}
+      />
+      <input
+        type="number"
+        inputMode="numeric"
+        placeholder={placeholders.reps}
+        aria-label={`${ex.name} ${quoi}, répétitions`}
+        value={row.reps ?? ''}
+        onChange={(e) => onField('reps', e.target.value)}
+      />
+      <input
+        type="number"
+        inputMode="decimal"
+        step="0.5"
+        placeholder={placeholders.rpe}
+        aria-label={`${ex.name} ${quoi}, RPE`}
+        value={row.rpe ?? ''}
+        onChange={(e) => onField('rpe', e.target.value)}
+      />
+      <button
+        className={`ok${done ? ' done' : ''}`}
+        onClick={() => (done ? onUnvalidate() : onValidate())}
+        aria-label={done ? 'Annuler la validation' : 'Valider'}
+        title={
+          done ? 'Annuler' : warmup ? 'Valider la montée en charge' : 'Valider et démarrer le repos'
+        }
+      >
+        ✓
+      </button>
     </div>
   )
 }

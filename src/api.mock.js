@@ -14,6 +14,12 @@ const workouts = [
 ]
 
 const sets = [
+  // Montées en charge de la dernière séance lourde : elles doivent apparaître
+  // dans la séance sans polluer les courbes ni le tonnage.
+  ...[[40, 8], [60, 5], [75, 3]].map(([kg, reps], i) => ({
+    id: `w3-dc-w${i}`, workout_id: 'w3', exercise_key: 'dc_barre', set_index: i,
+    weight: kg, reps, rpe: null, warmup: true, performed_at: daysAgo(7),
+  })),
   ...[
     ['w1', 21, 82.5], ['w2', 14, 85], ['w3', 7, 87.5],
   ].flatMap(([w, d, kg]) =>

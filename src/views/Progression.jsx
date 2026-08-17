@@ -40,6 +40,9 @@ export default function Progression() {
   const series = useMemo(() => {
     const byDate = new Map()
     for (const s of sets) {
+      // Une montée en charge n'est pas une performance : elle ne doit pas
+      // entrer dans les courbes, ni dans le volume, ni dans le compte de séries.
+      if (s.warmup) continue
       const cur = byDate.get(s.performed_at) || { top: 0, e1rm: 0, volume: 0, count: 0, best: null }
       if (s.weight > cur.top) {
         cur.top = s.weight

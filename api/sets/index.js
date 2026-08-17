@@ -29,7 +29,7 @@ export default handler({
     const rows = exercises.length
       ? await sql`
           select id, workout_id, exercise_key, set_index,
-                 weight::float8 as weight, reps, rpe::float8 as rpe,
+                 weight::float8 as weight, reps, rpe::float8 as rpe, warmup,
                  performed_at::text as performed_at
           from sets
           where user_id = ${user.id} and exercise_key = any(${exercises})
@@ -38,7 +38,7 @@ export default handler({
         `
       : await sql`
           select id, workout_id, exercise_key, set_index,
-                 weight::float8 as weight, reps, rpe::float8 as rpe,
+                 weight::float8 as weight, reps, rpe::float8 as rpe, warmup,
                  performed_at::text as performed_at
           from sets
           where user_id = ${user.id} and workout_id = any(${workouts}::uuid[])
@@ -67,18 +67,21 @@ export default handler({
     `
     if (!owner.length) return res.status(404).json({ error: 'Séance introuvable' })
 
+    // Une série d'échauffement et une série de travail peuvent porter le même
+    // numéro : l'unicité, et donc le on conflict, incluent `warmup`.
     const rows = await sql`
       insert into sets
-        (user_id, workout_id, exercise_key, set_index, weight, reps, rpe, performed_at)
+        (user_id, workout_id, exercise_key, set_index, weight, reps, rpe, warmup, performed_at)
       values
         (${user.id}, ${b.workout_id}, ${b.exercise_key}, ${Number(b.set_index)},
-         ${num(b.weight)}, ${num(b.reps)}, ${num(b.rpe)}, ${b.performed_at})
-      on conflict (workout_id, exercise_key, set_index)
+         ${num(b.weight)}, ${num(b.reps)}, ${num(b.rpe)}, ${b.warmup === true},
+         ${b.performed_at})
+      on conflict (workout_id, exercise_key, set_index, warmup)
         do update set weight = excluded.weight,
                       reps   = excluded.reps,
                       rpe    = excluded.rpe
       returning id, workout_id, exercise_key, set_index,
-                 weight::float8 as weight, reps, rpe::float8 as rpe,
+                 weight::float8 as weight, reps, rpe::float8 as rpe, warmup,
                  performed_at::text as performed_at
     `
     return res.status(201).json({ set: rows[0] })

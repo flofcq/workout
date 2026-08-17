@@ -59,11 +59,15 @@ export default function Historique() {
       {workouts.map((w) => {
         const day = getDay(w.day_key)
         const sets = setsByWorkout[w.id] || []
-        const tonnage = sets.reduce((n, s) => n + (s.weight || 0) * (s.reps || 0), 0)
+        // L'échauffement ne compte ni dans le tonnage ni dans le nombre de
+        // séries : ce n'est pas le travail de la séance.
+        const working = sets.filter((s) => !s.warmup)
+        const warmups = sets.length - working.length
+        const tonnage = working.reduce((n, s) => n + (s.weight || 0) * (s.reps || 0), 0)
         const open = openId === w.id
 
         const byEx = {}
-        for (const s of sets) (byEx[s.exercise_key] ||= []).push(s)
+        for (const s of working) (byEx[s.exercise_key] ||= []).push(s)
 
         return (
           <div className="card tight" key={w.id}>
@@ -78,7 +82,8 @@ export default function Historique() {
                     {day?.title || w.day_key}
                   </div>
                   <div className="tiny" style={{ marginTop: 2 }}>
-                    {formatLong(w.date)} · {sets.length} séries · {Math.round(tonnage)} kg de tonnage
+                    {formatLong(w.date)} · {working.length} séries · {Math.round(tonnage)} kg de
+                    tonnage
                   </div>
                 </div>
                 <span className="tag grey">{w.day_key.toUpperCase()}</span>
@@ -110,6 +115,11 @@ export default function Historique() {
                     ))}
                   </tbody>
                 </table>
+                {warmups > 0 && (
+                  <p className="tiny" style={{ marginTop: 8 }}>
+                    + {warmups} série{warmups > 1 ? 's' : ''} d'échauffement, hors tonnage.
+                  </p>
+                )}
                 <button
                   className="btn ghost sm danger"
                   style={{ marginTop: 10, paddingLeft: 0 }}

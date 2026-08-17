@@ -3,7 +3,7 @@
 Application web pour enregistrer tes séances et tes charges, avec le programme
 « Priorité pectoraux » pré-chargé.
 
-- **Séance** — les 5 séances du programme, saisie charge / reps / RPE, rappel de ta dernière performance sur chaque exercice, chrono de repos qui démarre tout seul quand tu valides une série.
+- **Séance** — les 5 séances du programme, échauffement en tête et montées en charge calculées, saisie charge / reps / RPE, rappel de ta dernière performance sur chaque exercice, chrono de repos qui démarre tout seul quand tu valides une série.
 - **Historique** — toutes tes séances passées, dépliables.
 - **Progression** — courbes d'évolution par exercice (charge la plus lourde ou 1RM estimé).
 - **Corps** — poids, mensurations et nombre de pas dans le temps.
@@ -54,6 +54,12 @@ d'investir 10 minutes dans la configuration.
 3. Copie tout le contenu de [`db/schema.sql`](db/schema.sql), colle-le, exécute.
 
 Ça crée quatre tables : `users`, `workouts`, `sets`, `body_metrics`.
+
+⚠️ **Si ta base existe déjà**, rejoue ce fichier après chaque mise à jour de l'app :
+il est entièrement rejouable (`if not exists`) et se charge des colonnes ajoutées
+depuis — `sets.warmup` et `body_metrics.steps` aujourd'hui. Sans ça, l'API
+échouera à enregistrer une série : elle s'appuie sur une contrainte d'unicité
+que la migration met en place.
 
 ---
 
@@ -161,7 +167,7 @@ Toutes les routes exigent une session valide, sauf `signup` et `login`.
 | `/api/auth/me` | `GET` | Utilisateur courant, ou `null` |
 | `/api/workouts` | `GET` `POST` | Liste (60 dernières) · crée la séance du jour |
 | `/api/workouts/:id` | `DELETE` | Supprime une séance et ses séries |
-| `/api/sets` | `GET` `POST` | Filtre `?exercises=` ou `?workouts=` · enregistre une série |
+| `/api/sets` | `GET` `POST` | Filtre `?exercises=` ou `?workouts=` · enregistre une série (champ `warmup`) |
 | `/api/sets/:id` | `PATCH` `DELETE` | Modifie · supprime une série |
 | `/api/body-metrics` | `GET` `PUT` | Liste · enregistre une mesure (une par jour) |
 | `/api/steps` | `POST` | Enregistre les pas du jour — jeton, pas de session (voir ci-dessous) |
@@ -230,6 +236,51 @@ jamais — les deux routes écrivent des colonnes distinctes de la même ligne.
 
 ---
 
+## L'échauffement
+
+Il a deux niveaux, tous les deux définis dans [`src/program.js`](src/program.js).
+
+**Le bloc général**, en tête de séance : un tableau `warmup` sur la journée, avec
+une consigne par ligne. C'est du rappel, rien n'est enregistré.
+
+```js
+{
+  key: 'j1',
+  day: 'Lundi',
+  warmup: [
+    '5 min de vélo ou de rameur…',
+    "Rotations externes à l'élastique : 2 × 15…",
+  ],
+  exercises: [ … ],
+}
+```
+
+**Les montées en charge**, sous chaque exercice lourd : le champ `ramp` indique
+combien de séries d'approche, et l'app calcule les charges depuis ta série de
+travail de la dernière séance.
+
+| `ramp` | Séries proposées |
+|---|---|
+| `1` | 60 % × 6 |
+| `2` | 55 % × 8, 75 % × 4 |
+| `3` | 50 % × 8, 70 % × 5, 85 % × 3 |
+
+Les charges sont arrondies au multiple de 2,5 kg le plus proche. Sans historique
+sur l'exercice, l'app affiche les pourcentages et te laisse juger.
+
+Le champ `added: true` marque les exercices lestés (tractions, dips), où la charge
+saisie est le lest et pas le poids soulevé : un pourcentage du lest n'aurait aucun
+sens, la première approche s'y fait donc au poids du corps.
+
+Ces séries **se valident et sont enregistrées** comme les autres, avec
+`warmup = true` en base. Valider une montée en charge sans rien taper enregistre
+la valeur suggérée — un geste par série. Deux différences avec une série de
+travail : le chrono de repos ne démarre pas (on enchaîne), et elles sont exclues
+partout où elles fausseraient la lecture — courbes de progression, tonnage,
+compteur de séries de la séance, et rappel « dernière fois ».
+
+---
+
 ## Adapter le programme
 
 Tout est dans [`src/program.js`](src/program.js) : séances, exercices, séries,
@@ -249,6 +300,8 @@ Pour ajouter un exercice, copie un bloc existant et donne-lui une clé inédite 
   muscles: 'Primaire · secondaires',
   cue: 'La consigne technique.',
   star: true,                  // marque les exercices prioritaires
+  ramp: 3,                     // facultatif : séries d'échauffement calculées
+  added: true,                 // facultatif : exercice lesté (tractions, dips)
   video: 'https://youtu.be/…', // facultatif, voir ci-dessous
 }
 ```

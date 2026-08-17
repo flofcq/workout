@@ -31,6 +31,9 @@ create table if not exists public.workouts (
 );
 
 -- ---------- Séries ----------
+-- `warmup` distingue les montées en charge des séries de travail. Les deux
+-- numérotent leurs séries à partir de 0, l'unicité porte donc sur les quatre
+-- colonnes — elle est créée plus bas, sous un nom stable.
 create table if not exists public.sets (
   id           uuid primary key default gen_random_uuid(),
   user_id      uuid not null references public.users(id) on delete cascade,
@@ -40,10 +43,21 @@ create table if not exists public.sets (
   weight       numeric(6,2),
   reps         int,
   rpe          numeric(3,1),
+  warmup       boolean not null default false,
   performed_at date not null default current_date,
-  created_at   timestamptz not null default now(),
-  unique (workout_id, exercise_key, set_index)
+  created_at   timestamptz not null default now()
 );
+
+-- Arrivé après coup, comme la colonne `steps` : ces trois lignes mettent à jour
+-- les bases créées avant l'échauffement et ne font rien sur les autres.
+alter table public.sets add column if not exists warmup boolean not null default false;
+-- L'ancienne unicité à trois colonnes interdisait qu'un échauffement et une
+-- série de travail partagent un numéro. Elle est remplacée par la version à
+-- quatre colonnes ci-dessous. Le nom est celui que Postgres génère pour
+-- `unique (workout_id, exercise_key, set_index)`.
+alter table public.sets drop constraint if exists sets_workout_id_exercise_key_set_index_key;
+create unique index if not exists sets_slot_uniq
+  on public.sets (workout_id, exercise_key, set_index, warmup);
 
 -- ---------- Poids de corps & mensurations ----------
 create table if not exists public.body_metrics (
