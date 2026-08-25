@@ -12,7 +12,9 @@ import {
 import { splitMuscleText } from '../muscles'
 import { parseDate, shiftDate, todayISO } from '../date'
 import { fmtDuration, fmtRest } from '../format'
+import { groupSessions } from '../history'
 import ExerciseLink from '../components/ExerciseLink'
+import HistoriqueExercice from '../components/HistoriqueExercice'
 
 // Le programme est ancré sur les jours de la semaine. On s'en sert pour
 // pré-sélectionner la séance, sans jamais l'imposer : jeudi et dimanche n'ont
@@ -38,7 +40,7 @@ function formatLong(iso) {
   })
 }
 
-export default function Seance({ onStartRest, onOpenMuscle }) {
+export default function Seance({ onStartRest, onOpenMuscle, onOpenHistory }) {
   const [date, setDate] = useState(todayISO)
   // Choix manuel de séance, mémorisé avec la date à laquelle il s'applique.
   // Changer de date l'invalide donc tout seul, et la suggestion du jour
@@ -47,6 +49,10 @@ export default function Seance({ onStartRest, onOpenMuscle }) {
   const [workout, setWorkout] = useState(null)
   const [rows, setRows] = useState({}) // slot -> [{ weight, reps, rpe, id }]
   const [last, setLast] = useState({}) // exKey -> { date, sets: [] }
+  // Toutes les séances antérieures à la date affichée, par exercice : le
+  // rappel « dernière fois » n'en montre qu'une, l'historique déplié les a
+  // toutes. Même source que `last`, pour ne pas diverger.
+  const [history, setHistory] = useState({})
   // Exercices ajoutés en cours de séance, absents du plan du jour.
   const [extras, setExtras] = useState([])
   // Exercices hors programme déjà utilisés par le compte, pour les reproposer.
@@ -124,11 +130,13 @@ export default function Seance({ onStartRest, onOpenMuscle }) {
       // performances, et ils fausseraient les montées en charge calculées.
       // `all` est trié par performed_at décroissant : le premier trouvé est le bon.
       const prev = {}
-      for (const s of all) {
-        if (s.warmup) continue
-        if (s.performed_at >= date) continue
-        const e = (prev[s.exercise_key] ||= { workoutId: s.workout_id, date: s.performed_at, sets: [] })
-        if (e.workoutId === s.workout_id) e.sets.push(s)
+      const hist = {}
+      const keys = new Set(all.map((s) => s.exercise_key))
+      for (const k of keys) {
+        const sessions = groupSessions(all.filter((s) => s.exercise_key === k), { before: date })
+        hist[k] = sessions
+        const newest = sessions.find((s) => s.working.length > 0)
+        if (newest) prev[k] = { workoutId: newest.id, date: newest.date, sets: newest.working }
       }
 
       // Meilleure charge par exercice avant la date affichée : la référence qui
@@ -144,6 +152,7 @@ export default function Seance({ onStartRest, onOpenMuscle }) {
 
       setRows(current)
       setLast(prev)
+      setHistory(hist)
       setBest(tops)
     } catch (e) {
       setError(e.message)
@@ -391,10 +400,12 @@ export default function Seance({ onStartRest, onOpenMuscle }) {
                 rows={rows[ex.key] || []}
                 warmRows={rows[slot(ex.key, true)] || []}
                 last={last[ex.key]}
+                history={history[ex.key] || []}
                 onField={(idx, f, v, warmup) => setField(slot(ex.key, warmup), idx, f, v)}
                 onValidate={(idx, opts) => validateSet(ex, idx, opts)}
                 onUnvalidate={(idx, warmup) => unvalidateSet(ex, idx, warmup)}
                 onOpenMuscle={onOpenMuscle}
+                onOpenHistory={onOpenHistory}
               />
             ))}
           </div>
@@ -410,10 +421,12 @@ export default function Seance({ onStartRest, onOpenMuscle }) {
                     rows={rows[ex.key] || []}
                     warmRows={rows[slot(ex.key, true)] || []}
                     last={last[ex.key]}
+                    history={history[ex.key] || []}
                     onField={(idx, f, v, warmup) => setField(slot(ex.key, warmup), idx, f, v)}
                     onValidate={(idx, opts) => validateSet(ex, idx, opts)}
                     onUnvalidate={(idx, warmup) => unvalidateSet(ex, idx, warmup)}
                     onOpenMuscle={onOpenMuscle}
+                    onOpenHistory={onOpenHistory}
                     onRemove={
                       (rows[ex.key] || []).some((r) => r?.id)
                         ? null
@@ -577,13 +590,17 @@ function Exercice({
   rows,
   warmRows,
   last,
+  history = [],
   onField,
   onValidate,
   onUnvalidate,
   onRemove,
   onOpenMuscle,
+  onOpenHistory,
 }) {
   const [open, setOpen] = useState(false)
+  const [histOpen, setHistOpen] = useState(false)
+  const histCount = history.filter((s) => s.working.length > 0).length
 
   // Charge de référence pour les montées en charge : la plus lourde de la
   // dernière séance sur cet exercice.
@@ -625,6 +642,34 @@ function Exercice({
               .join(' · ')}
           </b>
         </div>
+      )}
+
+      {histCount > 0 && (
+        <>
+          <button
+            className="btn ghost sm ex-hist-toggle"
+            onClick={() => setHistOpen(!histOpen)}
+          >
+            {histOpen
+              ? '− Masquer l\'historique'
+              : `+ Historique (${histCount} séance${histCount > 1 ? 's' : ''})`}
+          </button>
+          {histOpen && (
+            <>
+              <HistoriqueExercice sessions={history} />
+              {onOpenHistory && (
+                <button
+                  type="button"
+                  className="btn ghost sm"
+                  style={{ paddingLeft: 0 }}
+                  onClick={() => onOpenHistory(ex.key)}
+                >
+                  Voir la courbe dans Progression
+                </button>
+              )}
+            </>
+          )}
+        </>
       )}
 
       {ramp.length > 0 && (

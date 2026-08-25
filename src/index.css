@@ -175,6 +175,24 @@ p:last-child { margin-bottom: 0; }
 }
 .exo-last b { color: var(--ink); font-variant-numeric: tabular-nums; }
 
+/* Historique d'un exercice (séance dépliée, onglet Progression). */
+.ex-hist { list-style: none; margin: 0; padding: 0; }
+.ex-hist li {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+}
+.ex-hist li:last-child { border-bottom: 0; padding-bottom: 0; }
+.ex-hist-date {
+  font-size: 11.5px; color: var(--muted); font-weight: 650;
+  text-transform: capitalize;
+}
+.ex-hist-sets {
+  font-variant-numeric: tabular-nums; font-weight: 650;
+  font-size: 14.5px; margin-top: 2px; line-height: 1.35;
+}
+.ex-hist-meta { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.ex-hist-toggle { padding: 4px 0; margin-top: 6px; }
+
 /* ---------- Muscles ---------- */
 
 .mus-def { margin: 10px 0 0; font-size: 13.5px; }
@@ -194,7 +212,13 @@ p:last-child { margin-bottom: 0; }
   text-decoration: underline dotted var(--muted);
   text-underline-offset: 2px;
 }
-.mus-link:hover, .mus-link:focus-visible { color: var(--accent); text-decoration-color: var(--accent); }
+.hist-link {
+  border: 0; background: none; padding: 0; margin-left: 8px;
+  font: inherit; font-size: 12px; color: var(--muted); cursor: pointer;
+  text-decoration: underline dotted var(--muted);
+  text-underline-offset: 2px;
+}
+.hist-link:hover, .hist-link:focus-visible { color: var(--accent); text-decoration-color: var(--accent); }
 
 /* Fiche atteinte depuis une séance : signalée le temps qu'on la repère. */
 .card.mus-target { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }

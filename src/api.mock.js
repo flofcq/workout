@@ -18,6 +18,8 @@ const workouts = [
   { id: 'w2', day_key: 'j1', date: daysAgo(14), ...withDuration(daysAgo(14), 66) },
   { id: 'w3', day_key: 'j1', date: daysAgo(7), ...withDuration(daysAgo(7), 63) },
   { id: 'w4', day_key: 'j4', date: daysAgo(4), ...withDuration(daysAgo(4), 58) },
+  { id: 'w5', day_key: 'j2', date: daysAgo(15), ...withDuration(daysAgo(15), 70) },
+  { id: 'w6', day_key: 'j2', date: daysAgo(8), ...withDuration(daysAgo(8), 64) },
 ]
 
 const sets = [
@@ -47,6 +49,17 @@ const sets = [
     id: `w4-dib-${i}`, workout_id: 'w4', exercise_key: 'di_barre', set_index: i,
     weight: 62.5, reps: 8 - (i > 1 ? 1 : 0), rpe: 8, performed_at: daysAgo(4),
   })),
+  // Mardi (j2) : assez d'historique pour déplier l'exercice le jour où la
+  // démo ouvre la séance du jour — sans ça, mardi n'aurait que « dernière fois »
+  // vide pour les tractions.
+  ...[
+    ['w5', 15, 12.5], ['w6', 8, 15],
+  ].flatMap(([w, d, kg]) =>
+    [0, 1, 2, 3].map((i) => ({
+      id: `${w}-tr-${i}`, workout_id: w, exercise_key: 'tractions', set_index: i,
+      weight: kg, reps: 8 - (i > 1 ? 1 : 0), rpe: 8, performed_at: daysAgo(d),
+    }))
+  ),
   // Exercice ajouté en séance faute de machine : porte son libellé, puisque
   // program.js ne le connaît pas.
   ...[['w3', 7, 120], ['w4', 4, 130]].flatMap(([w, d, kg]) =>

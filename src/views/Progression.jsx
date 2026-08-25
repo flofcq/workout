@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
 import { api } from '../api'
 import { EXERCISES, estimate1RM, getExercise } from '../program'
+import { groupSessions } from '../history'
 import LineChartCard from '../components/LineChartCard'
 import ExerciseLink from '../components/ExerciseLink'
+import HistoriqueExercice from '../components/HistoriqueExercice'
 
 const STARRED = EXERCISES.filter((e) => e.star)
 
-export default function Progression() {
+export default function Progression({ target, onTargetHandled }) {
   const [exKey, setExKey] = useState(STARRED[0]?.key || EXERCISES[0].key)
   const [sets, setSets] = useState([])
   // Exercices ajoutés en séance hors programme : ils n'existent pas dans
@@ -16,6 +18,22 @@ export default function Progression() {
   const [error, setError] = useState(null)
   const [mode, setMode] = useState('top') // 'top' = série la plus lourde · 'e1rm' = 1RM estimé
   const [showTable, setShowTable] = useState(false)
+  const [pinHistory, setPinHistory] = useState(false)
+
+  // Arrivée depuis une séance : on bascule sur l'exercice visé avant de
+  // charger, sinon un instant afficherait encore le précédent.
+  useEffect(() => {
+    if (!target) return
+    setExKey(target)
+    setPinHistory(true)
+    onTargetHandled?.()
+  }, [target, onTargetHandled])
+
+  useEffect(() => {
+    if (!pinHistory || loading) return
+    document.getElementById('ex-hist')?.scrollIntoView({ block: 'start' })
+    setPinHistory(false)
+  }, [pinHistory, loading, exKey])
 
   const ex =
     getExercise(exKey) ||
@@ -94,6 +112,7 @@ export default function Progression() {
   const latest = series[series.length - 1]
   const key = mode === 'top' ? 'top' : 'e1rm'
   const delta = first && latest && first[key] && latest[key] ? latest[key] - first[key] : null
+  const sessions = useMemo(() => groupSessions(sets), [sets])
 
   return (
     <>
@@ -218,6 +237,15 @@ export default function Progression() {
                 devient trop imprécise pour être utile.
               </p>
             )}
+          </div>
+
+          <div className="card" id="ex-hist">
+            <h3>Historique — {ex?.name}</h3>
+            <p className="tiny" style={{ marginBottom: 8 }}>
+              Toutes tes séries de travail, de la plus récente à la plus ancienne. L'échauffement
+              ne compte pas.
+            </p>
+            <HistoriqueExercice sessions={sessions} />
           </div>
         </>
       )}
