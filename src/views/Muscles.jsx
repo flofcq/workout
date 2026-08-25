@@ -5,7 +5,7 @@ import ExerciseLink from '../components/ExerciseLink'
 
 const cardId = (key) => `mus-${key}`
 
-export default function Muscles({ target, onTargetHandled }) {
+export default function Muscles({ target, onTargetHandled, onOpenHistory }) {
   const [region, setRegion] = useState('tous')
   // Fiche mise en évidence à l'arrivée depuis une séance.
   const [highlight, setHighlight] = useState(null)
@@ -61,7 +61,12 @@ export default function Muscles({ target, onTargetHandled }) {
       </div>
 
       {list.map((m) => (
-        <MuscleCard key={m.key} muscle={m} highlighted={highlight === m.key} />
+        <MuscleCard
+          key={m.key}
+          muscle={m}
+          highlighted={highlight === m.key}
+          onOpenHistory={onOpenHistory}
+        />
       ))}
 
       <p className="tiny" style={{ marginTop: 4 }}>
@@ -72,7 +77,7 @@ export default function Muscles({ target, onTargetHandled }) {
   )
 }
 
-function MuscleCard({ muscle, highlighted }) {
+function MuscleCard({ muscle, highlighted, onOpenHistory }) {
   const [open, setOpen] = useState(false)
 
   // Arrivée depuis une séance : on déplie le détail des faisceaux, c'est le
@@ -137,6 +142,15 @@ function MuscleCard({ muscle, highlighted }) {
                     calendaire, les libellés J1…J5 n'apparaissent plus nulle part. */}
                 <span className="k">{e.dayName.slice(0, 3)}</span>
                 <ExerciseLink ex={e} />
+                {onOpenHistory && (
+                  <button
+                    type="button"
+                    className="hist-link"
+                    onClick={() => onOpenHistory(e.key)}
+                  >
+                    historique
+                  </button>
+                )}
               </li>
             ))}
           </ul>

@@ -4,7 +4,7 @@ import { getDay, getExercise } from '../program'
 import ExerciseLink from '../components/ExerciseLink'
 import { fmtDuration } from '../format'
 
-export default function Historique() {
+export default function Historique({ onOpenHistory }) {
   const [workouts, setWorkouts] = useState([])
   const [setsByWorkout, setSetsByWorkout] = useState({})
   const [openId, setOpenId] = useState(null)
@@ -114,6 +114,15 @@ export default function Historique() {
                             <ExerciseLink ex={getExercise(k)} />
                           ) : (
                             list[0]?.exercise_name || k
+                          )}
+                          {onOpenHistory && (
+                            <button
+                              type="button"
+                              className="hist-link"
+                              onClick={() => onOpenHistory(k)}
+                            >
+                              historique
+                            </button>
                           )}
                         </td>
                         <td>

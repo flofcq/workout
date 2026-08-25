@@ -28,6 +28,9 @@ export default function App() {
   // Fiche muscle visée depuis une séance. Vidée dès que l'onglet Muscles l'a
   // consommée, sinon revenir sur l'onglet re-défilerait vers l'ancienne cible.
   const [muscleTarget, setMuscleTarget] = useState(null)
+  // Exercice visé depuis Séance / Historique / Muscles : Progression le
+  // consomme puis le vide, comme muscleTarget.
+  const [exerciseTarget, setExerciseTarget] = useState(null)
   const update = useAppUpdate()
   const offline = useOfflineStatus()
 
@@ -58,9 +61,15 @@ export default function App() {
     setTab('muscles')
   }, [])
 
-  // useCallback obligatoire : cette fonction est une dépendance d'effet dans
-  // Muscles, une identité neuve à chaque rendu le relancerait en boucle.
+  const openHistory = useCallback((key) => {
+    setExerciseTarget(key)
+    setTab('progression')
+  }, [])
+
+  // useCallback obligatoire : ces fonctions sont des dépendances d'effet
+  // dans Muscles et Progression ; une identité neuve relancerait en boucle.
   const clearMuscleTarget = useCallback(() => setMuscleTarget(null), [])
+  const clearExerciseTarget = useCallback(() => setExerciseTarget(null), [])
 
   async function logout() {
     await api.auth.logout()
@@ -91,12 +100,20 @@ export default function App() {
 
         <OfflineBar status={offline} />
 
-        {tab === 'seance' && <Seance onStartRest={startRest} onOpenMuscle={openMuscle} />}
-        {tab === 'historique' && <Historique />}
-        {tab === 'progression' && <Progression />}
+        {tab === 'seance' && (
+          <Seance onStartRest={startRest} onOpenMuscle={openMuscle} onOpenHistory={openHistory} />
+        )}
+        {tab === 'historique' && <Historique onOpenHistory={openHistory} />}
+        {tab === 'progression' && (
+          <Progression target={exerciseTarget} onTargetHandled={clearExerciseTarget} />
+        )}
         {tab === 'corps' && <Corps />}
         {tab === 'muscles' && (
-          <Muscles target={muscleTarget} onTargetHandled={clearMuscleTarget} />
+          <Muscles
+            target={muscleTarget}
+            onTargetHandled={clearMuscleTarget}
+            onOpenHistory={openHistory}
+          />
         )}
       </div>
 

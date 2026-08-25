@@ -3,9 +3,9 @@
 Application web pour enregistrer tes séances et tes charges, avec le programme
 « Priorité pectoraux » pré-chargé.
 
-- **Séance** — saisie charge / reps / RPE jour par jour : tu navigues par date (flèches ou calendrier) et choisis la séance par son nom, ce qui permet de rattraper celle d'hier. Échauffement en tête et montées en charge calculées, bouton pour démarrer et terminer la séance avec bilan à la fin. Machine occupée ? **Ajoute un exercice** à la volée, pris ailleurs dans le programme ou saisi librement. Rappel de ta dernière performance, temps de repos affiché et chrono qui démarre tout seul quand tu valides une série.
-- **Historique** — toutes tes séances passées, dépliables, avec leur durée.
-- **Progression** — courbes d'évolution par exercice (charge la plus lourde ou 1RM estimé).
+- **Séance** — saisie charge / reps / RPE jour par jour : tu navigues par date (flèches ou calendrier) et choisis la séance par son nom, ce qui permet de rattraper celle d'hier. Échauffement en tête et montées en charge calculées, bouton pour démarrer et terminer la séance avec bilan à la fin. Machine occupée ? **Ajoute un exercice** à la volée, pris ailleurs dans le programme ou saisi librement. Rappel de ta dernière performance, historique dépliable de toutes tes séances sur l'exercice, temps de repos affiché et chrono qui démarre tout seul quand tu valides une série.
+- **Historique** — toutes tes séances passées, dépliables, avec leur durée. Un lien **historique** sur chaque exercice ouvre toutes ses séries.
+- **Progression** — courbes d'évolution par exercice (charge la plus lourde ou 1RM estimé), et l'historique complet des séries.
 - **Corps** — poids, mensurations et nombre de pas dans le temps.
 - **Muscles** — fiche par muscle : où il est, ce qu'il fait, ses faisceaux, et les exercices du programme qui le travaillent. Les muscles cités sous chaque exercice de la séance sont **cliquables** et mènent droit à leur fiche.
 
