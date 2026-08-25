@@ -333,6 +333,17 @@ p:last-child { margin-bottom: 0; }
   border-radius: 99px; padding: 7px 13px; font-size: 13px; font-weight: 700;
 }
 
+/* ---------- Hors ligne ---------- */
+
+.offlinebar {
+  background: var(--accent-soft); border: 1px solid var(--line);
+  border-left: 3px solid var(--accent); border-radius: 9px;
+  padding: 10px 12px; font-size: 13px; margin-bottom: 12px; line-height: 1.4;
+}
+.offlinebar.off {
+  border-left-color: var(--muted);
+}
+
 /* ---------- Forms ---------- */
 
 .field { margin-bottom: 11px; }

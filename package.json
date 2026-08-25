@@ -9,6 +9,8 @@
     "build": "vite build",
     "lint": "oxlint",
     "test:steps": "node scripts/test-steps.mjs",
+    "test:offline": "node scripts/test-offline.mjs",
+    "test": "node scripts/test-steps.mjs && node scripts/test-steps.mjs sans-config && node scripts/test-offline.mjs",
     "preview": "vite preview",
     "dev:ui": "vite"
   },
