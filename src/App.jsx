@@ -7,6 +7,8 @@ import Corps from './views/Corps'
 import Muscles from './views/Muscles'
 import RestTimer from './components/RestTimer'
 import useAppUpdate from './useAppUpdate'
+import useOfflineStatus from './useOfflineStatus'
+import { warmCache } from './offline/wrap'
 
 const TABS = [
   { key: 'seance', label: 'Séance', ico: '🏋️' },
@@ -20,20 +22,30 @@ export default function App() {
   const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
   const [serverDown, setServerDown] = useState(false)
+  const [needNetwork, setNeedNetwork] = useState(false)
   const [tab, setTab] = useState('seance')
   const [timer, setTimer] = useState(null) // { seconds, label, id }
   // Fiche muscle visée depuis une séance. Vidée dès que l'onglet Muscles l'a
   // consommée, sinon revenir sur l'onglet re-défilerait vers l'ancienne cible.
   const [muscleTarget, setMuscleTarget] = useState(null)
   const update = useAppUpdate()
+  const offline = useOfflineStatus()
 
   useEffect(() => {
     api.auth
       .me()
-      .then(setUser)
+      .then((u) => {
+        setUser(u)
+        if (u) warmCache(api)
+      })
       // Une 500 ici veut presque toujours dire que DATABASE_URL ou AUTH_SECRET
       // manque : l'API ne démarre pas. On le distingue d'un simple « pas connecté ».
-      .catch(() => setServerDown(true))
+      // Un status 0, c'est le réseau : si aucune session n'a jamais été
+      // mémorisée, on ne peut rien afficher hors ligne.
+      .catch((e) => {
+        if (e instanceof ApiError && e.status === 0) setNeedNetwork(true)
+        else setServerDown(true)
+      })
       .finally(() => setLoading(false))
   }, [])
 
@@ -55,9 +67,15 @@ export default function App() {
     setUser(null)
   }
 
+  function onAuthed(u) {
+    setUser(u)
+    warmCache(api)
+  }
+
   if (loading) return <div className="spinner">Chargement…</div>
+  if (needNetwork) return <NeedNetwork />
   if (serverDown) return <SetupNeeded />
-  if (!user) return <Login onAuth={setUser} />
+  if (!user) return <Login onAuth={onAuthed} />
 
   return (
     <>
@@ -70,6 +88,8 @@ export default function App() {
             Déconnexion
           </button>
         </div>
+
+        <OfflineBar status={offline} />
 
         {tab === 'seance' && <Seance onStartRest={startRest} onOpenMuscle={openMuscle} />}
         {tab === 'historique' && <Historique />}
@@ -115,6 +135,51 @@ export default function App() {
   )
 }
 
+function OfflineBar({ status }) {
+  if (status.online && status.pending === 0 && !status.error) return null
+
+  let text
+  if (!status.online) {
+    text =
+      status.pending > 0
+        ? `Hors ligne — ${status.pending} modification${status.pending > 1 ? 's' : ''} sur le téléphone, envoyée${status.pending > 1 ? 's' : ''} au retour du réseau.`
+        : 'Hors ligne — tu peux saisir ta séance, elle partira toute seule au retour du réseau.'
+  } else if (status.error) {
+    text = `Envoi impossible : ${status.error}`
+  } else if (status.syncing) {
+    text = 'Envoi de tes séries…'
+  } else {
+    text = `${status.pending} modification${status.pending > 1 ? 's' : ''} en attente d'envoi.`
+  }
+
+  return (
+    <div className={`offlinebar${status.online ? '' : ' off'}`} role="status">
+      {text}
+    </div>
+  )
+}
+
+function NeedNetwork() {
+  return (
+    <div className="app" style={{ maxWidth: 400, paddingTop: 60 }}>
+      <h1>Hors ligne</h1>
+      <p className="sub" style={{ marginBottom: 18 }}>
+        Ouvre l'app une fois avec du réseau pour emporter tes séances. Ensuite, le vestiaire
+        n'a plus besoin de 4G.
+      </p>
+      <div className="card">
+        <p className="tiny">
+          Si tu viens de l'ajouter à l'écran d'accueil, relance-la en Wi-Fi ou en 4G : le
+          téléphone mémorise alors le programme et tes dernières séances.
+        </p>
+        <button className="btn primary block" style={{ marginTop: 14 }} onClick={() => window.location.reload()}>
+          Réessayer
+        </button>
+      </div>
+    </div>
+  )
+}
+
 function Login({ onAuth }) {
   const [mode, setMode] = useState('login') // 'login' | 'signup'
   const [email, setEmail] = useState('')
@@ -143,7 +208,7 @@ function Login({ onAuth }) {
       <p className="sub" style={{ marginBottom: 22 }}>
         {signup
           ? 'Crée ton compte pour enregistrer tes séances.'
-          : 'Connecte-toi pour retrouver tes séances sur tous tes appareils.'}
+          : 'Connecte-toi pour retrouver tes séances sur tous tes appareils, et les emporter hors ligne.'}
       </p>
 
       <form className="card" onSubmit={submit}>

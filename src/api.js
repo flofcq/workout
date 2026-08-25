@@ -1,19 +1,13 @@
 import { mockApi } from './api.mock'
+import { ApiError } from './apiError'
+import { wrapOffline } from './offline/wrap'
+
+export { ApiError }
 
 // Mode démo : interface remplie avec des données factices, aucune base requise.
 // Active-le avec VITE_DEMO=1 (voir README) pour regarder l'app avant de créer
 // ta base Neon.
 export const isDemo = import.meta.env.VITE_DEMO === '1'
-
-/** Erreur portant le code HTTP, pour que l'appelant puisse distinguer un 401. */
-export class ApiError extends Error {
-  constructor(message, status, code) {
-    super(message)
-    this.name = 'ApiError'
-    this.status = status
-    this.code = code // SQLSTATE Postgres, quand l'API en renvoie un
-  }
-}
 
 async function request(path, { method = 'GET', body } = {}) {
   let res
@@ -106,4 +100,38 @@ const realApi = {
   },
 }
 
-export const api = isDemo ? mockApi : realApi
+function createApi() {
+  // Démo comprise : hors ligne (DevTools ou vestiaire), on sert le cache
+  // plutôt que l'API simulée, qui ne passe pas par fetch.
+  return wrapOffline(isDemo ? mockApi : realApi, lazyStore())
+}
+
+function lazyStore() {
+  let impl = null
+  let pending = null
+  const load = () => {
+    if (impl) return impl
+    if (!pending) {
+      pending = import('./offline/idb')
+        .then((m) => m.createIdbStore(isDemo ? 'suivi-salle-demo' : 'suivi-salle'))
+        .then((s) => {
+        impl = s
+        return s
+      })
+    }
+    return pending
+  }
+  return new Proxy(
+    {},
+    {
+      get(_t, prop) {
+        return async (...args) => {
+          const s = await load()
+          return s[prop](...args)
+        }
+      },
+    }
+  )
+}
+
+export const api = createApi()

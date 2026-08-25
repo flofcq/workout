@@ -9,7 +9,9 @@ Application web pour enregistrer tes séances et tes charges, avec le programme
 - **Corps** — poids, mensurations et nombre de pas dans le temps.
 - **Muscles** — fiche par muscle : où il est, ce qu'il fait, ses faisceaux, et les exercices du programme qui le travaillent. Les muscles cités sous chaque exercice de la séance sont **cliquables** et mènent droit à leur fiche.
 
-Fonctionne sur téléphone, synchronisé entre appareils.
+Fonctionne sur téléphone, **y compris hors ligne** une fois l'app ouverte
+avec du réseau. Tes séries restent sur le téléphone et partent toutes seules
+au retour de la 4G. Synchronisé entre appareils dès qu'un réseau est là.
 
 ---
 
@@ -140,6 +142,25 @@ Puis, dans le dashboard Vercel → **Settings → Environment Variables**, ajout
 
 Une fois déployé, ouvre le site sur ton téléphone et **ajoute-le à l'écran
 d'accueil** : il s'ouvrira en plein écran comme une application.
+
+### Hors ligne, à la salle
+
+Ouvre l'app **une fois avec du réseau** (Wi-Fi à la maison suffit) : elle
+télécharge le programme, tes dernières séances et tes charges. Ensuite, au
+vestiaire sans 4G :
+
+- l'onglet **Séance** reste utilisable : tu valides tes séries, le chrono de
+  repos tourne, tu peux terminer la séance ;
+- l'historique, la progression et le corps affichent ce qui a déjà été
+  téléchargé ;
+- une bannière te prévient que tu es hors ligne.
+
+Dès que le téléphone retrouve du réseau, les séries partent toutes seules.
+Les heures de début et de fin restent posées **par le serveur** au moment de
+l'envoi — l'horloge du téléphone ne sert qu'à afficher le chrono en attendant.
+
+Si tu ouvres l'icône pour la première fois sans réseau, l'app n'a encore rien
+à montrer : reconnecte-toi, puis relance-la.
 
 ### Créer ton compte
 
@@ -478,8 +499,13 @@ continue de s'afficher sans lui.
   démarrage, ou au retour au premier plan après plus de 30 minutes, la page se
   recharge sans rien demander. Pendant une séance, elle propose seulement — un
   rechargement effacerait les charges tapées mais pas encore validées.
+- **Hors ligne** : un service worker met en cache la coquille (HTML, JS, CSS).
+  Les données vivent dans IndexedDB ; les écritures hors ligne s'empilent et
+  sont rejouées. Voir [`src/offline/wrap.js`](src/offline/wrap.js). Le SW est
+  network-first sur `index.html` pour ne pas masquer un déploiement.
 - **Thème sombre** automatique selon le réglage du système.
 - **1RM estimé** : formule d'Epley, ignorée au-delà de 12 répétitions où
   l'estimation devient trop imprécise.
-- Le mode démo (`npm run demo`) n'écrit rien : les validations de séries ne sont
-  pas persistées.
+- Le mode démo (`npm run demo`) n'écrit rien sur le serveur : hors ligne, les
+  séries restent toutefois sur le téléphone (IndexedDB) jusqu'au rechargement
+  en ligne, où l'API simulée les oublie.

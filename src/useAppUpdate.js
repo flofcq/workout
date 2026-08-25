@@ -74,6 +74,8 @@ export default function useAppUpdate() {
         deployed = await fetchDeployedVersion()
       } catch {
         return // Hors ligne : on retentera au prochain passage au premier plan.
+        // Le SW est network-first sur index.html, donc en ligne on compare
+        // au déploiement actuel, pas à la copie gardée pour le vestiaire.
       } finally {
         busy.current = false
       }
